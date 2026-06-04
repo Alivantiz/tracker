@@ -43,9 +43,10 @@ export default function DayView({ onDateChange }) {
       day = nd
     }
     setDayId(day.id)
+    setBaked(0)  // reset before loading
     const dayBaked = day.baked || 0
     setBaked(dayBaked)
-    if (!dayBaked) { setBakedInput(''); setShowBakedModal(true) }
+    if (!dayBaked && date === new Date().toISOString().slice(0,10)) { setBakedInput(''); setShowBakedModal(true) }
     else setShowBakedModal(false)
 
     const [{ data: salesData }, { data: expData }] = await Promise.all([
@@ -193,9 +194,9 @@ export default function DayView({ onDateChange }) {
 
         {/* Date nav */}
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-          <button onClick={() => setDate(d => dateAdd(d, -1))} style={navBtn}>‹</button>
+          <button onClick={() => setDate(prev => dateAdd(prev, -1))} style={navBtn}>‹</button>
           <div style={{ flex:1, textAlign:'center', fontSize:14, fontWeight:700, color:'var(--text)' }}>{dateFmt(date)}</div>
-          <button onClick={() => setDate(d => dateAdd(d, 1))} style={navBtn}>›</button>
+          <button onClick={() => setDate(prev => dateAdd(prev, 1))} style={navBtn}>›</button>
           {!isToday && (
             <button onClick={() => setDate(todayStr())} style={{ ...navBtn, borderColor:'var(--accent)', color:'var(--accent)', fontSize:11, padding:'6px 10px' }}>Сегодня</button>
           )}
