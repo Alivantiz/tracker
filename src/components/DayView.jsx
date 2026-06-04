@@ -151,6 +151,8 @@ export default function DayView({ onDateChange }) {
   const remaining = Math.max(0, baked - stats.net - totalBonus)
   const progressPct = baked > 0 ? Math.min(100, Math.round(((stats.net + totalBonus) / baked) * 100)) : 0
 
+  const doneShops = shops.filter(sh => (sales[sh.id]?.quantity || 0) > 0).length
+
   if (loading) return (
     <div className="page" style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh' }}>
       <div className="spinner" />
@@ -256,7 +258,7 @@ export default function DayView({ onDateChange }) {
       {/* ── TAB: МАГАЗИНЫ ── */}
       {tab === 'shops' && (
         <div style={{ padding:'12px 12px 0' }}>
-          {shops.map(sh => {
+          {shops.map((sh, idx) => {
             const s = sales[sh.id] || {}
             const q = parseFloat(s.quantity) || 0
             const r = parseFloat(s.returns) || 0
@@ -266,7 +268,7 @@ export default function DayView({ onDateChange }) {
             return (
               <div className="card" key={sh.id}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                  <span style={{ fontWeight:700, fontSize:15 }}>{sh.name}</span>
+                  <span style={{ fontWeight:700, fontSize:15 }}><span style={{ color:'var(--muted)', fontSize:12, fontWeight:600, marginRight:5 }}>#{idx+1}</span>{sh.name}</span>
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                     {b > 0 && <span style={{ fontSize:11, color:'var(--accent)' }}>🎁 {b} шт</span>}
                     <span style={{ color: sum>0?'var(--green)':sum<0?'var(--red)':'var(--muted)', fontWeight:700, fontSize:14 }}>
@@ -376,7 +378,7 @@ export default function DayView({ onDateChange }) {
           </div>
 
           {/* По магазинам */}
-          {shops.map(sh => {
+          {shops.map((sh, idx) => {
             const s = sales[sh.id]
             if (!s || (!s.quantity && !s.returns)) return null
             const net = (s.quantity||0)-(s.returns||0)
