@@ -338,19 +338,7 @@ export default function DayView({ onDateChange }) {
         </div>
 
         {/* ── РАСХОДЫ (единый раздел) ── */}
-        <SectionTitle icon="💸" title="Расходы" onAdd={() => addExpense()} />
-
-        {/* Шаблоны */}
-        {expTemplates.length > 0 && (
-          <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
-            {expTemplates.map(t => (
-              <button key={t.id} onClick={() => addFromTemplate(t)}
-                style={{ background:'rgba(245,131,74,0.1)', border:'1px solid rgba(245,131,74,0.3)', borderRadius:20, padding:'5px 12px', fontSize:12, fontWeight:700, color:'var(--orange)', cursor:'pointer' }}>
-                + {t.name} ({fmtMoney(t.amount)})
-              </button>
-            ))}
-          </div>
-        )}
+        <SectionTitle icon="💸" title="Расходы" />
 
         {/* Справочник материалов */}
         {materials.length > 0 && (
@@ -370,7 +358,7 @@ export default function DayView({ onDateChange }) {
             </div>
           </div>
         ))}
-        {expenses.length === 0 && <EmptyHint>Нажмите + или выберите из шаблонов/справочника</EmptyHint>}
+        {expenses.length === 0 && <EmptyHint>Выберите из справочника материалов выше</EmptyHint>}
 
         {/* ── ПРИБЫЛЬ ── */}
         <div className={`profit-card ${stats.profit >= 0 ? 'positive' : 'negative'}`} style={{ marginTop:16 }}>
