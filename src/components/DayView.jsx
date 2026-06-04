@@ -235,7 +235,7 @@ export default function DayView({ onDateChange }) {
               </div>
               <Field label="Оплата">
                 <div style={{ display:'flex', gap:5 }}>
-                  {['Наличка','Каспи','Карта'].map(pt => (
+                  {['Наличка','Каспи'].map(pt => (
                     <button key={pt} onClick={() => updateSale(sh.id, 'payment_type', pt)}
                       style={{ flex:1, padding:'6px 4px', border:'1px solid', borderRadius:7, fontSize:11, fontWeight:700, cursor:'pointer',
                         background: (s.payment_type||'Наличка')===pt ? 'var(--accent)' : 'var(--bg2)',
