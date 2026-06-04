@@ -161,7 +161,7 @@ export default function DayView({ onDateChange }) {
 
   const isToday = date === todayStr()
   const TABS = [
-    { key:'shops',    label:'🏪 Магазины' },
+    { key:'shops',    label:`🏪 Магазины (${doneShops}/${shops.length})` },
     { key:'expenses', label:'💸 Расходы' },
   ]
 
