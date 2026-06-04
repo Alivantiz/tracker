@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../supabase'
 import { todayStr, fmtMoney, calcDayStats } from '../utils'
 
@@ -26,7 +26,9 @@ export default function DayView({ onDateChange }) {
   const [purchases, setPurchases]     = useState([])
   const [salaries, setSalaries]       = useState([])
   const [loading, setLoading]         = useState(true)
-  const [saving, setSaving]           = useState({})
+  const [saveStatus, setSaveStatus]   = useState('idle') // idle | saving | saved
+  const saveTimers = useRef({})
+  const saveStatusTimer = useRef(null)
 
   useEffect(() => { onDateChange?.(date) }, [date])
 
@@ -66,6 +68,16 @@ export default function DayView({ onDateChange }) {
 
   useEffect(() => { loadDay() }, [loadDay])
 
+  // ── Debounced save indicator ──
+  function triggerSaveStatus() {
+    setSaveStatus('saving')
+    clearTimeout(saveStatusTimer.current)
+    saveStatusTimer.current = setTimeout(() => {
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 1500)
+    }, 800)
+  }
+
   async function saveBaked() {
     const val = parseInt(bakedInput) || 0
     if (!val) return
@@ -73,42 +85,74 @@ export default function DayView({ onDateChange }) {
     await supabase.from('days').update({ baked: val }).eq('id', dayId)
   }
 
-  async function updateSale(shopId, field, value) {
+  // ── Debounced sale update ──
+  function updateSaleLocal(shopId, field, value) {
     const shop = shops.find(s => s.id === shopId)
     const cur = sales[shopId] || { quantity:0, price: shop?.default_price || 0, payment_type:'Наличка', returns:0, bonus:0 }
     const upd = { ...cur, [field]: value }
     setSales(prev => ({ ...prev, [shopId]: upd }))
-    setSaving(s => ({ ...s, [shopId]: true }))
+    triggerSaveStatus()
+
+    const key = `${shopId}_${field}`
+    clearTimeout(saveTimers.current[key])
+    saveTimers.current[key] = setTimeout(async () => {
+      if (cur.id) {
+        await supabase.from('sales').update({ [field]: value }).eq('id', cur.id)
+      } else {
+        const { data } = await supabase.from('sales').upsert({
+          day_id: dayId, shop_id: shopId,
+          quantity: upd.quantity || 0,
+          price: upd.price || shop?.default_price || 0,
+          payment_type: upd.payment_type || 'Наличка',
+          returns: upd.returns || 0,
+          bonus: upd.bonus || 0,
+        }).select().single()
+        if (data) setSales(prev => ({ ...prev, [shopId]: data }))
+      }
+    }, 600)
+  }
+
+  // Payment type saves immediately (button tap)
+  async function updateSalePayment(shopId, value) {
+    const shop = shops.find(s => s.id === shopId)
+    const cur = sales[shopId] || { quantity:0, price: shop?.default_price || 0, payment_type:'Наличка', returns:0, bonus:0 }
+    const upd = { ...cur, payment_type: value }
+    setSales(prev => ({ ...prev, [shopId]: upd }))
     if (cur.id) {
-      await supabase.from('sales').update({ [field]: value }).eq('id', cur.id)
+      await supabase.from('sales').update({ payment_type: value }).eq('id', cur.id)
     } else {
       const { data } = await supabase.from('sales').upsert({
         day_id: dayId, shop_id: shopId,
         quantity: upd.quantity || 0,
         price: upd.price || shop?.default_price || 0,
-        payment_type: upd.payment_type || 'Наличка',
+        payment_type: value,
         returns: upd.returns || 0,
         bonus: upd.bonus || 0,
       }).select().single()
       if (data) setSales(prev => ({ ...prev, [shopId]: data }))
     }
-    setSaving(s => ({ ...s, [shopId]: false }))
   }
 
   async function addListItem(table, setter, extra = {}) {
     const { data } = await supabase.from(table).insert({ day_id: dayId, name:'', amount:0, ...extra }).select().single()
     if (data) setter(prev => [...prev, data])
   }
-  async function updateListItem(table, setter, id, fields) {
+
+  function updateListItemLocal(table, setter, id, fields) {
     setter(prev => prev.map(e => e.id === id ? { ...e, ...fields } : e))
-    await supabase.from(table).update(fields).eq('id', id)
+    triggerSaveStatus()
+    const key = `${table}_${id}_${Object.keys(fields)[0]}`
+    clearTimeout(saveTimers.current[key])
+    saveTimers.current[key] = setTimeout(async () => {
+      await supabase.from(table).update(fields).eq('id', id)
+    }, 600)
   }
+
   async function removeListItem(table, setter, id) {
     setter(prev => prev.filter(e => e.id !== id))
     await supabase.from(table).delete().eq('id', id)
   }
 
-  // Добавить из справочника материалов
   async function addMaterialExpense(matId, qty) {
     const mat = materials.find(m => m.id === matId)
     if (!mat) return
@@ -118,7 +162,6 @@ export default function DayView({ onDateChange }) {
     if (data) setPurchases(prev => [...prev, data])
   }
 
-  // Добавить из шаблона расходов
   async function addFromTemplate(tpl) {
     const table = tpl.category === 'Зарплата' ? 'salaries' : tpl.category === 'Закупы' ? 'purchases' : 'expenses'
     const setter = tpl.category === 'Зарплата' ? setSalaries : tpl.category === 'Закупы' ? setPurchases : setExpenses
@@ -134,7 +177,6 @@ export default function DayView({ onDateChange }) {
   const remaining = Math.max(0, baked - stats.net - totalBonus)
   const progressPct = baked > 0 ? Math.min(100, Math.round(((stats.net + totalBonus) / baked) * 100)) : 0
 
-  // Шаблоны по категориям
   const tplExpenses  = expTemplates.filter(t => t.category === 'Расходы')
   const tplSalaries  = expTemplates.filter(t => t.category === 'Зарплата')
   const tplPurchases = expTemplates.filter(t => t.category === 'Закупы')
@@ -172,7 +214,9 @@ export default function DayView({ onDateChange }) {
       {/* Topbar */}
       <div className="header">
         <div style={{ fontSize:10, color:'var(--muted)', textTransform:'uppercase', letterSpacing:1.5, marginBottom:6, fontWeight:700 }}>Рабочий день</div>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+
+        {/* Date nav */}
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
           <button onClick={() => setDate(d => dateAdd(d, -1))} style={navBtn}>‹</button>
           <div style={{ flex:1, textAlign:'center', fontSize:14, fontWeight:700, color:'var(--text)' }}>{dateFmt(date)}</div>
           <button onClick={() => setDate(d => dateAdd(d, 1))} style={navBtn}>›</button>
@@ -180,8 +224,29 @@ export default function DayView({ onDateChange }) {
             <button onClick={() => setDate(todayStr())} style={{ ...navBtn, borderColor:'var(--accent)', color:'var(--accent)', fontSize:11, padding:'6px 10px' }}>Сегодня</button>
           )}
         </div>
+
+        {/* ── PROFIT STRIP ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10 }}>
+          <ProfitTile label="Выручка" value={fmtMoney(stats.revenue)} color="var(--blue)" />
+          <ProfitTile label="Расходы" value={fmtMoney(stats.totalCosts)} color="var(--red)" />
+          <ProfitTile
+            label="Прибыль"
+            value={fmtMoney(stats.profit)}
+            color={stats.profit >= 0 ? 'var(--green)' : 'var(--red)'}
+            highlight={stats.profit !== 0}
+          />
+        </div>
+
+        {/* Save status */}
+        {saveStatus !== 'idle' && (
+          <div style={{ textAlign:'right', fontSize:10, color: saveStatus === 'saved' ? 'var(--green)' : 'var(--muted)', marginBottom:6, transition:'color .3s' }}>
+            {saveStatus === 'saving' ? '⏳ Сохраняется...' : '✓ Сохранено'}
+          </div>
+        )}
+
+        {/* Progress bar */}
         {baked > 0 && (
-          <div style={{ marginTop:10 }}>
+          <div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
               <div style={{ fontSize:11, color:'var(--muted)', fontWeight:600 }}>
                 🥖 Продано: <span style={{ color:'var(--green)', fontWeight:800 }}>{stats.net}</span>
@@ -222,34 +287,33 @@ export default function DayView({ onDateChange }) {
                   {b > 0 && <span style={{ fontSize:11, color:'var(--accent)' }}>🎁 {b} шт</span>}
                   <span style={{ color: sum > 0 ? 'var(--green)' : sum < 0 ? 'var(--red)' : 'var(--muted)', fontWeight:700, fontSize:14 }}>
                     {sum !== 0 ? fmtMoney(sum) : '—'}
-                    {saving[sh.id] && <span style={{ color:'var(--muted)', fontSize:10, marginLeft:5 }}>↑</span>}
                   </span>
                 </div>
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, marginBottom:6 }}>
                 <Field label="Продано">
                   <input className="input" type="number" inputMode="numeric" placeholder="шт"
-                    value={s.quantity || ''} onChange={e => updateSale(sh.id, 'quantity', parseInt(e.target.value) || 0)} />
+                    value={s.quantity || ''} onChange={e => updateSaleLocal(sh.id, 'quantity', parseInt(e.target.value) || 0)} />
                 </Field>
                 <Field label="↩ Возврат" labelColor="rgba(224,82,82,0.8)">
                   <input className="input" type="number" inputMode="numeric" placeholder="шт"
-                    value={s.returns || ''} onChange={e => updateSale(sh.id, 'returns', parseInt(e.target.value) || 0)}
+                    value={s.returns || ''} onChange={e => updateSaleLocal(sh.id, 'returns', parseInt(e.target.value) || 0)}
                     style={{ color:'var(--red)', borderColor: s.returns > 0 ? 'rgba(224,82,82,0.4)' : '' }} />
                 </Field>
                 <Field label="🎁 Бонус" labelColor="rgba(245,166,35,0.8)">
                   <input className="input" type="number" inputMode="numeric" placeholder="шт"
-                    value={s.bonus || ''} onChange={e => updateSale(sh.id, 'bonus', parseInt(e.target.value) || 0)}
+                    value={s.bonus || ''} onChange={e => updateSaleLocal(sh.id, 'bonus', parseInt(e.target.value) || 0)}
                     style={{ color:'var(--accent)', borderColor: s.bonus > 0 ? 'rgba(245,166,35,0.4)' : '' }} />
                 </Field>
                 <Field label="Цена (₸)">
                   <input className="input" type="number" inputMode="decimal" placeholder={sh.default_price || '₸'}
-                    value={s.price || ''} onChange={e => updateSale(sh.id, 'price', parseFloat(e.target.value) || 0)} />
+                    value={s.price || ''} onChange={e => updateSaleLocal(sh.id, 'price', parseFloat(e.target.value) || 0)} />
                 </Field>
               </div>
               <Field label="Оплата">
                 <div style={{ display:'flex', gap:5 }}>
                   {['Наличка','Каспи'].map(pt => (
-                    <button key={pt} onClick={() => updateSale(sh.id, 'payment_type', pt)}
+                    <button key={pt} onClick={() => updateSalePayment(sh.id, pt)}
                       style={{ flex:1, padding:'6px 4px', border:'1px solid', borderRadius:7, fontSize:11, fontWeight:700, cursor:'pointer',
                         background: (s.payment_type||'Наличка')===pt ? 'var(--accent)' : 'var(--bg2)',
                         borderColor: (s.payment_type||'Наличка')===pt ? 'var(--accent)' : 'var(--border)',
@@ -301,8 +365,8 @@ export default function DayView({ onDateChange }) {
         {purchases.map(e => (
           <ListCard key={e.id} colorBg="rgba(165,123,245,0.06)" colorBorder="rgba(165,123,245,0.25)">
             <ListCardRow name={e.name} amount={e.amount} placeholder="Поставщик / товар"
-              onName={v => updateListItem('purchases', setPurchases, e.id, { name: v })}
-              onAmount={v => updateListItem('purchases', setPurchases, e.id, { amount: parseFloat(v) || 0 })}
+              onName={v => updateListItemLocal('purchases', setPurchases, e.id, { name: v })}
+              onAmount={v => updateListItemLocal('purchases', setPurchases, e.id, { amount: parseFloat(v) || 0 })}
               onRemove={() => removeListItem('purchases', setPurchases, e.id)} />
           </ListCard>
         ))}
@@ -314,8 +378,8 @@ export default function DayView({ onDateChange }) {
         {expenses.map(e => (
           <ListCard key={e.id} colorBg="rgba(245,131,74,0.06)" colorBorder="rgba(245,131,74,0.25)">
             <ListCardRow name={e.name || ''} amount={e.amount} placeholder="Описание расхода"
-              onName={v => updateListItem('expenses', setExpenses, e.id, { name: v })}
-              onAmount={v => updateListItem('expenses', setExpenses, e.id, { amount: parseFloat(v) || 0 })}
+              onName={v => updateListItemLocal('expenses', setExpenses, e.id, { name: v })}
+              onAmount={v => updateListItemLocal('expenses', setExpenses, e.id, { amount: parseFloat(v) || 0 })}
               onRemove={() => removeListItem('expenses', setExpenses, e.id)} />
           </ListCard>
         ))}
@@ -327,8 +391,8 @@ export default function DayView({ onDateChange }) {
         {salaries.map(e => (
           <ListCard key={e.id} colorBg="rgba(91,138,245,0.06)" colorBorder="rgba(91,138,245,0.25)">
             <ListCardRow name={e.name} amount={e.amount} placeholder="Имя рабочего"
-              onName={v => updateListItem('salaries', setSalaries, e.id, { name: v })}
-              onAmount={v => updateListItem('salaries', setSalaries, e.id, { amount: parseFloat(v) || 0 })}
+              onName={v => updateListItemLocal('salaries', setSalaries, e.id, { name: v })}
+              onAmount={v => updateListItemLocal('salaries', setSalaries, e.id, { amount: parseFloat(v) || 0 })}
               onRemove={() => removeListItem('salaries', setSalaries, e.id)} />
           </ListCard>
         ))}
@@ -364,7 +428,20 @@ export default function DayView({ onDateChange }) {
   )
 }
 
-// Быстрые кнопки из шаблонов
+// ── Profit strip tile ──
+function ProfitTile({ label, value, color, highlight }) {
+  return (
+    <div style={{
+      background: highlight ? `${color}12` : 'rgba(255,255,255,0.03)',
+      border: `1px solid ${highlight ? color + '30' : 'var(--border)'}`,
+      borderRadius:8, padding:'6px 8px', textAlign:'center'
+    }}>
+      <div style={{ fontSize:8, color:'var(--muted)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:2 }}>{label}</div>
+      <div style={{ fontSize:14, fontWeight:800, color }}>{value}</div>
+    </div>
+  )
+}
+
 function TemplatePicker({ templates, onAdd, color }) {
   return (
     <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
@@ -378,7 +455,6 @@ function TemplatePicker({ templates, onAdd, color }) {
   )
 }
 
-// Быстрый выбор из справочника материалов
 function MaterialPicker({ materials, onAdd }) {
   const [selId, setSelId] = useState('')
   const [qty, setQty]     = useState('1')
