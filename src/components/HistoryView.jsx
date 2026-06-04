@@ -14,7 +14,7 @@ export default function HistoryView() {
         supabase.from('days').select(`
           id, date,
           sales ( id, shop_id, quantity, price, payment_type, returns ),
-          expenses ( id, amount, name, expense_categories(name) ),
+          expenses ( id, amount, name ),
           purchases ( id, amount, name ),
           salaries ( id, amount, name )
         `).order('date', { ascending: false }),
@@ -68,7 +68,6 @@ export default function HistoryView() {
 
           return (
             <div key={month} style={{ marginBottom:24 }}>
-              {/* Month header */}
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:8, padding:'0 2px' }}>
                 <span style={{ fontWeight:800, color:'var(--accent)', fontSize:15 }}>{fmtMonthLabel(month)}</span>
                 <div style={{ textAlign:'right' }}>
@@ -79,7 +78,6 @@ export default function HistoryView() {
                 </div>
               </div>
 
-              {/* Month summary */}
               <div style={{ background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:12, padding:12, marginBottom:10 }}>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
                   <MonthTile label="Продано" value={`${mStats.sold} шт`} />
@@ -129,7 +127,6 @@ export default function HistoryView() {
 function DayDetail({ day, shops, stats }) {
   return (
     <div style={{ background:'#13151e', border:'1px solid var(--border)', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'12px 14px' }}>
-      {/* Sales */}
       <Label>Продажи</Label>
       {day.sales.filter(s => s.quantity > 0 || s.returns > 0).map(s => {
         const shop = shops.find(sh => sh.id === s.shop_id)
@@ -141,22 +138,18 @@ function DayDetail({ day, shops, stats }) {
           </Row>
         )
       })}
-      {/* Purchases */}
       {day.purchases?.length > 0 && <>
         <Label style={{ marginTop:8 }}>Закупы</Label>
         {day.purchases.map(e => <Row key={e.id}><span style={{ color:'var(--purple)' }}>{e.name||'—'}</span><span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span></Row>)}
       </>}
-      {/* Expenses */}
       {day.expenses?.length > 0 && <>
         <Label style={{ marginTop:8 }}>Расходы</Label>
-        {day.expenses.map(e => <Row key={e.id}><span style={{ color:'var(--orange)' }}>{e.name || e.expense_categories?.name || '—'}</span><span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span></Row>)}
+        {day.expenses.map(e => <Row key={e.id}><span style={{ color:'var(--orange)' }}>{e.name||'—'}</span><span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span></Row>)}
       </>}
-      {/* Salaries */}
       {day.salaries?.length > 0 && <>
         <Label style={{ marginTop:8 }}>Зарплата</Label>
         {day.salaries.map(e => <Row key={e.id}><span style={{ color:'var(--blue)' }}>{e.name||'—'}</span><span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span></Row>)}
       </>}
-      {/* Total */}
       <div style={{ display:'flex', justifyContent:'space-between', marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', fontWeight:700 }}>
         <span>Прибыль</span>
         <span style={{ color: stats.profit >= 0 ? 'var(--green)' : 'var(--red)', fontSize:15 }}>{fmtMoney(stats.profit)}</span>
