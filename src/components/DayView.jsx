@@ -395,31 +395,6 @@ export default function DayView({ onDateChange }) {
             )
           })}
 
-          <div style={{ height:1, background:'var(--border)', margin:'4px 0 8px' }} />
-
-          {/* Расходы */}
-          {expenses.length > 0 && (
-            <div style={{ background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 14px', marginBottom:8 }}>
-              {expenses.map(e => (
-                <Row key={e.id} label={e.name||'—'} value={'− '+fmtMoney(e.amount)} valColor="var(--red)" />
-              ))}
-              <div style={{ borderTop:'1px solid var(--border)', marginTop:6, paddingTop:6 }}>
-                <Row label="Итого расходов" value={'− '+fmtMoney(stats.totalExpenses)} valColor="var(--red)" bold />
-              </div>
-            </div>
-          )}
-
-          {/* Прибыль */}
-          <div className={`profit-card ${stats.profit>=0?'positive':'negative'}`}>
-            <Row label="Выручка"  value={fmtMoney(stats.revenue)} />
-            <Row label="Расходы"  value={'− '+fmtMoney(stats.totalExpenses)} valColor="var(--red)" />
-            <div style={{ borderTop:`1px solid ${stats.profit>=0?'#22543d':'#7f1d1d'}`, marginTop:8, paddingTop:8 }}>
-              <Row label="Чистая прибыль" value={fmtMoney(stats.profit)}
-                valColor={stats.profit>=0?'var(--green)':'var(--red)'} bold size={18} />
-            </div>
-          </div>
-        </div>
-      )}
 
     </div>
   )
