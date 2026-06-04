@@ -440,7 +440,7 @@ function MaterialPicker({ materials, onAdd }) {
     onAdd(selId, qty)
     setQty(1); setSelId('')
   }
-
+ 
   return (
     <div style={{ background:'rgba(245,131,74,0.04)', border:'1px solid rgba(245,131,74,0.2)', borderRadius:10, padding:10, marginBottom:8 }}>
       <div style={{ fontSize:10, color:'var(--orange)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:7 }}>Из справочника материалов</div>
