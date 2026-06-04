@@ -15,7 +15,6 @@ function dateFmt(str) {
 export default function DayView({ onDateChange }) {
   const [date, setDate]           = useState(todayStr())
   const [shops, setShops]         = useState([])
-  const [categories, setCategories] = useState([])
   const [dayId, setDayId]         = useState(null)
   const [sales, setSales]         = useState({})
   const [expenses, setExpenses]   = useState([])
@@ -28,7 +27,6 @@ export default function DayView({ onDateChange }) {
 
   useEffect(() => {
     supabase.from('shops').select('*').order('sort_order').then(({ data }) => setShops(data || []))
-    supabase.from('expense_categories').select('*').order('name').then(({ data }) => setCategories(data || []))
   }, [])
 
   const loadDay = useCallback(async () => {
@@ -41,7 +39,7 @@ export default function DayView({ onDateChange }) {
     setDayId(day.id)
     const [{ data: salesData }, { data: expData }, { data: purData }, { data: salData }] = await Promise.all([
       supabase.from('sales').select('*').eq('day_id', day.id),
-      supabase.from('expenses').select('*, expense_categories(name)').eq('day_id', day.id).order('created_at'),
+      supabase.from('expenses').select('*').eq('day_id', day.id).order('created_at'),
       supabase.from('purchases').select('*').eq('day_id', day.id).order('created_at'),
       supabase.from('salaries').select('*').eq('day_id', day.id).order('created_at'),
     ])
@@ -74,8 +72,8 @@ export default function DayView({ onDateChange }) {
     setSaving(s => ({ ...s, [shopId]: false }))
   }
 
-  async function addListItem(table, setter, extra = {}) {
-    const { data } = await supabase.from(table).insert({ day_id: dayId, name:'', amount:0, ...extra }).select().single()
+  async function addListItem(table, setter) {
+    const { data } = await supabase.from(table).insert({ day_id: dayId, name:'', amount:0 }).select().single()
     if (data) setter(prev => [...prev, data])
   }
   async function updateListItem(table, setter, id, fields) {
@@ -90,8 +88,6 @@ export default function DayView({ onDateChange }) {
   const salesArr = shops.map(sh => ({ ...sales[sh.id], shop_id: sh.id }))
   const stats = calcDayStats(salesArr, expenses, purchases, salaries)
   const { byPayment } = stats
-
-  // Only show payment types that have non-zero value
   const activePayments = Object.entries(byPayment).filter(([, v]) => v !== 0)
 
   if (loading) return (
@@ -122,7 +118,6 @@ export default function DayView({ onDateChange }) {
 
       <div style={{ padding:'12px 12px 0' }}>
 
-        {/* ── SHOPS ── */}
         <SectionTitle icon="🏪" title={`Магазины (${shops.length})`} />
         {shops.map(sh => {
           const s = sales[sh.id] || {}
@@ -165,11 +160,9 @@ export default function DayView({ onDateChange }) {
           )
         })}
 
-        {/* ── SALES SUMMARY ── */}
         <div style={{ background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius:12, padding:'12px 14px', margin:'4px 0 8px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
-            <span style={{ color:'var(--muted)' }}>Продано</span>
-            <span>{stats.sold} шт</span>
+            <span style={{ color:'var(--muted)' }}>Продано</span><span>{stats.sold} шт</span>
           </div>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
             <span style={{ color:'var(--red)', opacity:.8 }}>↩ Возврат</span>
@@ -179,8 +172,6 @@ export default function DayView({ onDateChange }) {
             <span style={{ color:'var(--muted)' }}>Чистые продажи</span>
             <span style={{ fontWeight:700 }}>{stats.net} шт</span>
           </div>
-
-          {/* Payment breakdown */}
           {activePayments.map(([type, amount]) => (
             <div key={type} style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
               <span style={{ color:'var(--muted)' }}>
@@ -189,22 +180,12 @@ export default function DayView({ onDateChange }) {
               <span style={{ color: amount >= 0 ? 'var(--text)' : 'var(--red)' }}>{fmtMoney(amount)}</span>
             </div>
           ))}
-
-          {activePayments.length > 1 && (
-            <div style={{ borderTop:'1px solid var(--border)', marginTop:6, paddingTop:6, display:'flex', justifyContent:'space-between', fontSize:15, fontWeight:700 }}>
-              <span style={{ color:'var(--muted)' }}>Итого выручка</span>
-              <span style={{ color:'var(--accent)' }}>{fmtMoney(stats.revenue)}</span>
-            </div>
-          )}
-          {activePayments.length <= 1 && (
-            <div style={{ display:'flex', justifyContent:'space-between', fontSize:15, fontWeight:700, paddingTop:4 }}>
-              <span style={{ color:'var(--muted)' }}>Итого выручка</span>
-              <span style={{ color:'var(--accent)' }}>{fmtMoney(stats.revenue)}</span>
-            </div>
-          )}
+          <div style={{ borderTop:'1px solid var(--border)', marginTop:6, paddingTop:6, display:'flex', justifyContent:'space-between', fontSize:15, fontWeight:700 }}>
+            <span style={{ color:'var(--muted)' }}>Итого выручка</span>
+            <span style={{ color:'var(--accent)' }}>{fmtMoney(stats.revenue)}</span>
+          </div>
         </div>
 
-        {/* ── PURCHASES ── */}
         <SectionTitle icon="📦" title="Закупы" onAdd={() => addListItem('purchases', setPurchases)} />
         {purchases.map(e => (
           <ListCard key={e.id} colorBg="rgba(165,123,245,0.06)" colorBorder="rgba(165,123,245,0.25)">
@@ -216,7 +197,6 @@ export default function DayView({ onDateChange }) {
         ))}
         {purchases.length === 0 && <EmptyHint>Нажмите + чтобы добавить закуп</EmptyHint>}
 
-        {/* ── EXPENSES ── */}
         <SectionTitle icon="💸" title="Расходы" onAdd={() => addListItem('expenses', setExpenses)} />
         {expenses.map(e => (
           <ListCard key={e.id} colorBg="rgba(245,131,74,0.06)" colorBorder="rgba(245,131,74,0.25)">
@@ -228,7 +208,6 @@ export default function DayView({ onDateChange }) {
         ))}
         {expenses.length === 0 && <EmptyHint>Нажмите + чтобы добавить расход</EmptyHint>}
 
-        {/* ── SALARIES ── */}
         <SectionTitle icon="👷" title="Зарплата" onAdd={() => addListItem('salaries', setSalaries)} />
         {salaries.map(e => (
           <ListCard key={e.id} colorBg="rgba(91,138,245,0.06)" colorBorder="rgba(91,138,245,0.25)">
@@ -240,7 +219,6 @@ export default function DayView({ onDateChange }) {
         ))}
         {salaries.length === 0 && <EmptyHint>Нажмите + чтобы добавить зарплату</EmptyHint>}
 
-        {/* ── PROFIT ── */}
         <div className={`profit-card ${stats.profit >= 0 ? 'positive' : 'negative'}`} style={{ marginTop:16 }}>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
             <span style={{ color:'var(--muted)' }}>Выручка</span><span>{fmtMoney(stats.revenue)}</span>
