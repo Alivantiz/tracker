@@ -14,7 +14,7 @@ function dateFmt(str) {
 
 export default function DayView({ onDateChange }) {
   const [date, setDate]               = useState(todayStr())
-  const [tab, setTab]                 = useState('shops') // shops | expenses | summary
+  const [tab, setTab]                 = useState('shops') // shops | expenses
   const [shops, setShops]             = useState([])
   const [materials, setMaterials]     = useState([])
   const [dayId, setDayId]             = useState(null)
@@ -161,7 +161,6 @@ export default function DayView({ onDateChange }) {
   const TABS = [
     { key:'shops',    label:'🏪 Магазины' },
     { key:'expenses', label:'💸 Расходы' },
-    { key:'summary',  label:'📊 Итог' },
   ]
 
   return (
@@ -364,23 +363,6 @@ export default function DayView({ onDateChange }) {
         </div>
       )}
 
-      {/* ── TAB: ИТОГ ── */}
-      {tab === 'summary' && (
-        <div style={{ padding:'12px 12px 0' }}>
-
-          {/* Штуки */}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
-            <Tile label="🥖 Испёк"   value={baked+' шт'}       />
-            <Tile label="↩ Возврат"  value={stats.returns+' шт'} color="var(--red)" />
-            <Tile label="Продано"    value={stats.net+' шт'} color="var(--green)" />
-            <Tile label="Остаток"    value={remaining+' шт'} color={remaining>0?'var(--accent)':'var(--muted)'} />
-          </div>
-          {totalBonus > 0 && (
-            <div style={{ background:'rgba(245,166,35,0.06)', border:'1px solid rgba(245,166,35,0.25)', borderRadius:10, padding:'8px 14px', marginBottom:8 }}>
-              <Row label="🎁 Бонус (бесплатно)" value={totalBonus+' шт'} valColor="var(--accent)" />
-            </div>
-          )}
-
           <div style={{ height:1, background:'var(--border)', margin:'4px 0 8px' }} />
 
           {/* Оплата */}
@@ -452,14 +434,6 @@ function ProfitTile({ label, value, color, highlight }) {
   )
 }
 
-function Tile({ label, value, color }) {
-  return (
-    <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px' }}>
-      <div style={{ fontSize:9, color:'var(--muted)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:3 }}>{label}</div>
-      <div style={{ fontSize:18, fontWeight:800, color:color||'var(--text)' }}>{value}</div>
-    </div>
-  )
-}
 
 function Row({ label, value, valColor, bold, size }) {
   return (
