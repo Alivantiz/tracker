@@ -16,6 +16,9 @@ export default function DayView({ onDateChange }) {
   const [date, setDate]           = useState(todayStr())
   const [shops, setShops]         = useState([])
   const [dayId, setDayId]         = useState(null)
+  const [baked, setBaked]         = useState(0)
+  const [showBakedModal, setShowBakedModal] = useState(false)
+  const [bakedInput, setBakedInput] = useState('')
   const [sales, setSales]         = useState({})
   const [expenses, setExpenses]   = useState([])
   const [purchases, setPurchases] = useState([])
@@ -31,12 +34,23 @@ export default function DayView({ onDateChange }) {
 
   const loadDay = useCallback(async () => {
     setLoading(true)
-    let { data: day } = await supabase.from('days').select('id').eq('date', date).maybeSingle()
+    let { data: day } = await supabase.from('days').select('id,baked').eq('date', date).maybeSingle()
     if (!day) {
-      const { data: nd } = await supabase.from('days').insert({ date }).select('id').single()
+      const { data: nd } = await supabase.from('days').insert({ date, baked: 0 }).select('id,baked').single()
       day = nd
     }
     setDayId(day.id)
+    const dayBaked = day.baked || 0
+    setBaked(dayBaked)
+
+    // Показать модалку если baked не заполнен
+    if (!dayBaked) {
+      setBakedInput('')
+      setShowBakedModal(true)
+    } else {
+      setShowBakedModal(false)
+    }
+
     const [{ data: salesData }, { data: expData }, { data: purData }, { data: salData }] = await Promise.all([
       supabase.from('sales').select('*').eq('day_id', day.id),
       supabase.from('expenses').select('*').eq('day_id', day.id).order('created_at'),
@@ -53,6 +67,14 @@ export default function DayView({ onDateChange }) {
   }, [date])
 
   useEffect(() => { loadDay() }, [loadDay])
+
+  async function saveBaked() {
+    const val = parseInt(bakedInput) || 0
+    if (!val) return
+    setBaked(val)
+    setShowBakedModal(false)
+    await supabase.from('days').update({ baked: val }).eq('id', dayId)
+  }
 
   async function updateSale(shopId, field, value) {
     const cur = sales[shopId] || { quantity:0, price:0, payment_type:'Наличка', returns:0 }
@@ -89,6 +111,8 @@ export default function DayView({ onDateChange }) {
   const stats = calcDayStats(salesArr, expenses, purchases, salaries)
   const { byPayment } = stats
   const activePayments = Object.entries(byPayment).filter(([, v]) => v !== 0)
+  const remaining = Math.max(0, baked - stats.net)
+  const progressPct = baked > 0 ? Math.min(100, Math.round((stats.net / baked) * 100)) : 0
 
   if (loading) return (
     <div className="page" style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh' }}>
@@ -100,6 +124,48 @@ export default function DayView({ onDateChange }) {
 
   return (
     <div className="page fade-in">
+
+      {/* ── МОДАЛКА: Сколько испёк ── */}
+      {showBakedModal && (
+        <div style={{
+          position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', zIndex:200,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:24
+        }}>
+          <div style={{
+            background:'var(--bg2)', border:'1px solid var(--border)',
+            borderRadius:18, padding:24, width:'100%', maxWidth:320, textAlign:'center'
+          }}>
+            <div style={{ fontSize:44, marginBottom:8 }}>🥖</div>
+            <div style={{ fontSize:18, fontWeight:800, marginBottom:4 }}>
+              {dateFmt(date)}
+            </div>
+            <div style={{ fontSize:13, color:'var(--muted)', marginBottom:20 }}>
+              Сколько лепёшек испёк сегодня?
+            </div>
+            <input
+              className="input"
+              type="number"
+              inputMode="numeric"
+              value={bakedInput}
+              onChange={e => setBakedInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && saveBaked()}
+              placeholder="0"
+              autoFocus
+              style={{ textAlign:'center', fontSize:28, fontWeight:800, padding:14, marginBottom:16 }}
+            />
+            <button
+              className="btn-primary"
+              onClick={saveBaked}
+              disabled={!bakedInput || parseInt(bakedInput) <= 0}
+              style={{ width:'100%', opacity: (!bakedInput || parseInt(bakedInput) <= 0) ? .4 : 1 }}
+            >
+              Готово ✓
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Topbar */}
       <div className="header">
         <div style={{ fontSize:10, color:'var(--muted)', textTransform:'uppercase', letterSpacing:1.5, marginBottom:6, fontWeight:700 }}>
           Рабочий день
@@ -114,10 +180,39 @@ export default function DayView({ onDateChange }) {
             </button>
           )}
         </div>
+
+        {/* Прогресс-бар */}
+        {baked > 0 && (
+          <div style={{ marginTop:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+              <div style={{ fontSize:11, color:'var(--muted)', fontWeight:600 }}>
+                🥖 Продано: <span style={{ color:'var(--green)', fontWeight:800 }}>{stats.net}</span> из <span style={{ color:'var(--text)' }}>{baked}</span> шт
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontSize:11, color: remaining > 0 ? 'var(--accent)' : 'var(--green)', fontWeight:700 }}>
+                  {remaining > 0 ? `остаток: ${remaining} шт` : '✓ всё продано'}
+                </span>
+                <button
+                  onClick={() => { setBakedInput(String(baked)); setShowBakedModal(true) }}
+                  style={{ background:'none', border:'none', color:'var(--muted)', fontSize:13, cursor:'pointer', padding:'0 2px', lineHeight:1 }}
+                  title="Изменить количество"
+                >✏️</button>
+              </div>
+            </div>
+            <div style={{ background:'var(--border)', borderRadius:4, height:5 }}>
+              <div style={{
+                width: progressPct + '%', height:5, borderRadius:4,
+                background: progressPct >= 100 ? 'var(--green)' : 'var(--accent)',
+                transition:'width .3s ease', minWidth: progressPct > 0 ? 4 : 0
+              }} />
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ padding:'12px 12px 0' }}>
 
+        {/* ── SHOPS ── */}
         <SectionTitle icon="🏪" title={`Магазины (${shops.length})`} />
         {shops.map(sh => {
           const s = sales[sh.id] || {}
@@ -160,9 +255,11 @@ export default function DayView({ onDateChange }) {
           )
         })}
 
+        {/* ── SALES SUMMARY ── */}
         <div style={{ background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius:12, padding:'12px 14px', margin:'4px 0 8px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
-            <span style={{ color:'var(--muted)' }}>Продано</span><span>{stats.sold} шт</span>
+            <span style={{ color:'var(--muted)' }}>Продано</span>
+            <span>{stats.sold} шт</span>
           </div>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
             <span style={{ color:'var(--red)', opacity:.8 }}>↩ Возврат</span>
@@ -186,6 +283,7 @@ export default function DayView({ onDateChange }) {
           </div>
         </div>
 
+        {/* ── PURCHASES ── */}
         <SectionTitle icon="📦" title="Закупы" onAdd={() => addListItem('purchases', setPurchases)} />
         {purchases.map(e => (
           <ListCard key={e.id} colorBg="rgba(165,123,245,0.06)" colorBorder="rgba(165,123,245,0.25)">
@@ -197,6 +295,7 @@ export default function DayView({ onDateChange }) {
         ))}
         {purchases.length === 0 && <EmptyHint>Нажмите + чтобы добавить закуп</EmptyHint>}
 
+        {/* ── EXPENSES ── */}
         <SectionTitle icon="💸" title="Расходы" onAdd={() => addListItem('expenses', setExpenses)} />
         {expenses.map(e => (
           <ListCard key={e.id} colorBg="rgba(245,131,74,0.06)" colorBorder="rgba(245,131,74,0.25)">
@@ -208,6 +307,7 @@ export default function DayView({ onDateChange }) {
         ))}
         {expenses.length === 0 && <EmptyHint>Нажмите + чтобы добавить расход</EmptyHint>}
 
+        {/* ── SALARIES ── */}
         <SectionTitle icon="👷" title="Зарплата" onAdd={() => addListItem('salaries', setSalaries)} />
         {salaries.map(e => (
           <ListCard key={e.id} colorBg="rgba(91,138,245,0.06)" colorBorder="rgba(91,138,245,0.25)">
@@ -219,6 +319,7 @@ export default function DayView({ onDateChange }) {
         ))}
         {salaries.length === 0 && <EmptyHint>Нажмите + чтобы добавить зарплату</EmptyHint>}
 
+        {/* ── PROFIT ── */}
         <div className={`profit-card ${stats.profit >= 0 ? 'positive' : 'negative'}`} style={{ marginTop:16 }}>
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
             <span style={{ color:'var(--muted)' }}>Выручка</span><span>{fmtMoney(stats.revenue)}</span>
