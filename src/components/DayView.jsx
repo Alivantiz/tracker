@@ -13,25 +13,27 @@ function dateFmt(str) {
 }
 
 export default function DayView({ onDateChange }) {
-  const [date, setDate]             = useState(todayStr())
-  const [shops, setShops]           = useState([])
-  const [materials, setMaterials]   = useState([])
-  const [dayId, setDayId]           = useState(null)
-  const [baked, setBaked]           = useState(0)
+  const [date, setDate]               = useState(todayStr())
+  const [shops, setShops]             = useState([])
+  const [materials, setMaterials]     = useState([])
+  const [expTemplates, setExpTemplates] = useState([])
+  const [dayId, setDayId]             = useState(null)
+  const [baked, setBaked]             = useState(0)
   const [showBakedModal, setShowBakedModal] = useState(false)
-  const [bakedInput, setBakedInput] = useState('')
-  const [sales, setSales]           = useState({})
-  const [expenses, setExpenses]     = useState([])
-  const [purchases, setPurchases]   = useState([])
-  const [salaries, setSalaries]     = useState([])
-  const [loading, setLoading]       = useState(true)
-  const [saving, setSaving]         = useState({})
+  const [bakedInput, setBakedInput]   = useState('')
+  const [sales, setSales]             = useState({})
+  const [expenses, setExpenses]       = useState([])
+  const [purchases, setPurchases]     = useState([])
+  const [salaries, setSalaries]       = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [saving, setSaving]           = useState({})
 
   useEffect(() => { onDateChange?.(date) }, [date])
 
   useEffect(() => {
     supabase.from('shops').select('*').order('sort_order').then(({ data }) => setShops(data || []))
     supabase.from('materials').select('*').order('sort_order').then(({ data }) => setMaterials(data || []))
+    supabase.from('expense_templates').select('*').order('sort_order').then(({ data }) => setExpTemplates(data || []))
   }, [])
 
   const loadDay = useCallback(async () => {
@@ -106,7 +108,7 @@ export default function DayView({ onDateChange }) {
     await supabase.from(table).delete().eq('id', id)
   }
 
-  // Добавить расход из справочника
+  // Добавить из справочника материалов
   async function addMaterialExpense(matId, qty) {
     const mat = materials.find(m => m.id === matId)
     if (!mat) return
@@ -116,6 +118,14 @@ export default function DayView({ onDateChange }) {
     if (data) setPurchases(prev => [...prev, data])
   }
 
+  // Добавить из шаблона расходов
+  async function addFromTemplate(tpl) {
+    const table = tpl.category === 'Зарплата' ? 'salaries' : tpl.category === 'Закупы' ? 'purchases' : 'expenses'
+    const setter = tpl.category === 'Зарплата' ? setSalaries : tpl.category === 'Закупы' ? setPurchases : setExpenses
+    const { data } = await supabase.from(table).insert({ day_id: dayId, name: tpl.name, amount: tpl.amount }).select().single()
+    if (data) setter(prev => [...prev, data])
+  }
+
   const salesArr = shops.map(sh => ({ ...sales[sh.id], shop_id: sh.id }))
   const stats = calcDayStats(salesArr, expenses, purchases, salaries)
   const { byPayment } = stats
@@ -123,6 +133,11 @@ export default function DayView({ onDateChange }) {
   const totalBonus = shops.reduce((a, sh) => a + (parseInt(sales[sh.id]?.bonus) || 0), 0)
   const remaining = Math.max(0, baked - stats.net - totalBonus)
   const progressPct = baked > 0 ? Math.min(100, Math.round(((stats.net + totalBonus) / baked) * 100)) : 0
+
+  // Шаблоны по категориям
+  const tplExpenses  = expTemplates.filter(t => t.category === 'Расходы')
+  const tplSalaries  = expTemplates.filter(t => t.category === 'Зарплата')
+  const tplPurchases = expTemplates.filter(t => t.category === 'Закупы')
 
   if (loading) return (
     <div className="page" style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh' }}>
@@ -165,8 +180,6 @@ export default function DayView({ onDateChange }) {
             <button onClick={() => setDate(todayStr())} style={{ ...navBtn, borderColor:'var(--accent)', color:'var(--accent)', fontSize:11, padding:'6px 10px' }}>Сегодня</button>
           )}
         </div>
-
-        {/* Прогресс-бар */}
         {baked > 0 && (
           <div style={{ marginTop:10 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
@@ -213,7 +226,7 @@ export default function DayView({ onDateChange }) {
                   </span>
                 </div>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, marginBottom: 6 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:6, marginBottom:6 }}>
                 <Field label="Продано">
                   <input className="input" type="number" inputMode="numeric" placeholder="шт"
                     value={s.quantity || ''} onChange={e => updateSale(sh.id, 'quantity', parseInt(e.target.value) || 0)} />
@@ -252,16 +265,26 @@ export default function DayView({ onDateChange }) {
 
         {/* ── SALES SUMMARY ── */}
         <div style={{ background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius:12, padding:'12px 14px', margin:'4px 0 8px' }}>
-          <div className="row-s"><span style={{ color:'var(--muted)' }}>Продано</span><span>{stats.sold} шт</span></div>
-          <div className="row-s"><span style={{ color:'var(--red)', opacity:.8 }}>↩ Возврат</span><span style={{ color:'var(--red)' }}>{stats.returns} шт</span></div>
-          {totalBonus > 0 && <div className="row-s"><span style={{ color:'var(--accent)', opacity:.8 }}>🎁 Бонус</span><span style={{ color:'var(--accent)' }}>{totalBonus} шт</span></div>}
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
+            <span style={{ color:'var(--muted)' }}>Продано</span><span>{stats.sold} шт</span>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
+            <span style={{ color:'var(--red)', opacity:.8 }}>↩ Возврат</span>
+            <span style={{ color:'var(--red)' }}>{stats.returns} шт</span>
+          </div>
+          {totalBonus > 0 && (
+            <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
+              <span style={{ color:'var(--accent)', opacity:.8 }}>🎁 Бонус</span>
+              <span style={{ color:'var(--accent)' }}>{totalBonus} шт</span>
+            </div>
+          )}
           <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0', borderBottom:'1px solid var(--border)', paddingBottom:8, marginBottom:8 }}>
             <span style={{ color:'var(--muted)' }}>Чистые продажи</span>
             <span style={{ fontWeight:700 }}>{stats.net} шт</span>
           </div>
           {activePayments.map(([type, amount]) => (
             <div key={type} style={{ display:'flex', justifyContent:'space-between', fontSize:13, padding:'3px 0' }}>
-              <span style={{ color:'var(--muted)' }}>{type==='Наличка'?'💵':type==='Каспи'?'📱':'💳'} {type}</span>
+              <span style={{ color:'var(--muted)' }}>{type==='Наличка'?'💵':'📱'} {type}</span>
               <span style={{ color: amount >= 0 ? 'var(--text)' : 'var(--red)' }}>{fmtMoney(amount)}</span>
             </div>
           ))}
@@ -271,11 +294,10 @@ export default function DayView({ onDateChange }) {
           </div>
         </div>
 
-        {/* ── ЗАКУПЫ из справочника ── */}
+        {/* ── ЗАКУПЫ ── */}
         <SectionTitle icon="📦" title="Закупы" onAdd={() => addListItem('purchases', setPurchases)} />
-        {materials.length > 0 && (
-          <MaterialPicker materials={materials} onAdd={addMaterialExpense} />
-        )}
+        {materials.length > 0 && <MaterialPicker materials={materials} onAdd={addMaterialExpense} />}
+        {tplPurchases.length > 0 && <TemplatePicker templates={tplPurchases} onAdd={addFromTemplate} color="var(--purple)" />}
         {purchases.map(e => (
           <ListCard key={e.id} colorBg="rgba(165,123,245,0.06)" colorBorder="rgba(165,123,245,0.25)">
             <ListCardRow name={e.name} amount={e.amount} placeholder="Поставщик / товар"
@@ -288,6 +310,7 @@ export default function DayView({ onDateChange }) {
 
         {/* ── РАСХОДЫ ── */}
         <SectionTitle icon="💸" title="Расходы" onAdd={() => addListItem('expenses', setExpenses)} />
+        {tplExpenses.length > 0 && <TemplatePicker templates={tplExpenses} onAdd={addFromTemplate} color="var(--orange)" />}
         {expenses.map(e => (
           <ListCard key={e.id} colorBg="rgba(245,131,74,0.06)" colorBorder="rgba(245,131,74,0.25)">
             <ListCardRow name={e.name || ''} amount={e.amount} placeholder="Описание расхода"
@@ -300,6 +323,7 @@ export default function DayView({ onDateChange }) {
 
         {/* ── ЗАРПЛАТА ── */}
         <SectionTitle icon="👷" title="Зарплата" onAdd={() => addListItem('salaries', setSalaries)} />
+        {tplSalaries.length > 0 && <TemplatePicker templates={tplSalaries} onAdd={addFromTemplate} color="var(--blue)" />}
         {salaries.map(e => (
           <ListCard key={e.id} colorBg="rgba(91,138,245,0.06)" colorBorder="rgba(91,138,245,0.25)">
             <ListCardRow name={e.name} amount={e.amount} placeholder="Имя рабочего"
@@ -340,7 +364,21 @@ export default function DayView({ onDateChange }) {
   )
 }
 
-// Быстрый выбор из справочника
+// Быстрые кнопки из шаблонов
+function TemplatePicker({ templates, onAdd, color }) {
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8 }}>
+      {templates.map(t => (
+        <button key={t.id} onClick={() => onAdd(t)}
+          style={{ background:`${color}15`, border:`1px solid ${color}40`, borderRadius:20, padding:'5px 12px', fontSize:12, fontWeight:700, color, cursor:'pointer' }}>
+          + {t.name} ({fmtMoney(t.amount)})
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Быстрый выбор из справочника материалов
 function MaterialPicker({ materials, onAdd }) {
   const [selId, setSelId] = useState('')
   const [qty, setQty]     = useState('1')
@@ -355,7 +393,7 @@ function MaterialPicker({ materials, onAdd }) {
 
   return (
     <div style={{ background:'rgba(165,123,245,0.04)', border:'1px solid rgba(165,123,245,0.2)', borderRadius:10, padding:10, marginBottom:8 }}>
-      <div style={{ fontSize:10, color:'var(--purple)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:7 }}>Быстрый выбор из справочника</div>
+      <div style={{ fontSize:10, color:'var(--purple)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:7 }}>Из справочника</div>
       <div style={{ display:'flex', gap:6, alignItems:'flex-end' }}>
         <div style={{ flex:2 }}>
           <div style={{ fontSize:9, color:'var(--label)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:3 }}>Материал</div>
