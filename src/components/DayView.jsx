@@ -43,7 +43,6 @@ export default function DayView({ onDateChange }) {
     const dayBaked = day.baked || 0
     setBaked(dayBaked)
 
-    // Показать модалку если baked не заполнен
     if (!dayBaked) {
       setBakedInput('')
       setShowBakedModal(true)
@@ -77,7 +76,8 @@ export default function DayView({ onDateChange }) {
   }
 
   async function updateSale(shopId, field, value) {
-    const cur = sales[shopId] || { quantity:0, price:0, payment_type:'Наличка', returns:0 }
+    const shop = shops.find(s => s.id === shopId)
+    const cur = sales[shopId] || { quantity:0, price: shop?.default_price || 0, payment_type:'Наличка', returns:0 }
     const upd = { ...cur, [field]: value }
     setSales(prev => ({ ...prev, [shopId]: upd }))
     setSaving(s => ({ ...s, [shopId]: true }))
@@ -86,8 +86,10 @@ export default function DayView({ onDateChange }) {
     } else {
       const { data } = await supabase.from('sales').upsert({
         day_id: dayId, shop_id: shopId,
-        quantity: upd.quantity || 0, price: upd.price || 0,
-        payment_type: upd.payment_type || 'Наличка', returns: upd.returns || 0,
+        quantity: upd.quantity || 0,
+        price: upd.price || shop?.default_price || 0,
+        payment_type: upd.payment_type || 'Наличка',
+        returns: upd.returns || 0,
       }).select().single()
       if (data) setSales(prev => ({ ...prev, [shopId]: data }))
     }
@@ -136,29 +138,18 @@ export default function DayView({ onDateChange }) {
             borderRadius:18, padding:24, width:'100%', maxWidth:320, textAlign:'center'
           }}>
             <div style={{ fontSize:44, marginBottom:8 }}>🥖</div>
-            <div style={{ fontSize:18, fontWeight:800, marginBottom:4 }}>
-              {dateFmt(date)}
-            </div>
+            <div style={{ fontSize:18, fontWeight:800, marginBottom:4 }}>{dateFmt(date)}</div>
             <div style={{ fontSize:13, color:'var(--muted)', marginBottom:20 }}>
               Сколько лепёшек испёк сегодня?
             </div>
-            <input
-              className="input"
-              type="number"
-              inputMode="numeric"
-              value={bakedInput}
-              onChange={e => setBakedInput(e.target.value)}
+            <input className="input" type="number" inputMode="numeric"
+              value={bakedInput} onChange={e => setBakedInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && saveBaked()}
-              placeholder="0"
-              autoFocus
-              style={{ textAlign:'center', fontSize:28, fontWeight:800, padding:14, marginBottom:16 }}
-            />
-            <button
-              className="btn-primary"
-              onClick={saveBaked}
+              placeholder="0" autoFocus
+              style={{ textAlign:'center', fontSize:28, fontWeight:800, padding:14, marginBottom:16 }} />
+            <button className="btn-primary" onClick={saveBaked}
               disabled={!bakedInput || parseInt(bakedInput) <= 0}
-              style={{ width:'100%', opacity: (!bakedInput || parseInt(bakedInput) <= 0) ? .4 : 1 }}
-            >
+              style={{ width:'100%', opacity: (!bakedInput || parseInt(bakedInput) <= 0) ? .4 : 1 }}>
               Готово ✓
             </button>
           </div>
@@ -192,11 +183,10 @@ export default function DayView({ onDateChange }) {
                 <span style={{ fontSize:11, color: remaining > 0 ? 'var(--accent)' : 'var(--green)', fontWeight:700 }}>
                   {remaining > 0 ? `остаток: ${remaining} шт` : '✓ всё продано'}
                 </span>
-                <button
-                  onClick={() => { setBakedInput(String(baked)); setShowBakedModal(true) }}
-                  style={{ background:'none', border:'none', color:'var(--muted)', fontSize:13, cursor:'pointer', padding:'0 2px', lineHeight:1 }}
-                  title="Изменить количество"
-                >✏️</button>
+                <button onClick={() => { setBakedInput(String(baked)); setShowBakedModal(true) }}
+                  style={{ background:'none', border:'none', color:'var(--muted)', fontSize:13, cursor:'pointer', padding:'0 2px', lineHeight:1 }}>
+                  ✏️
+                </button>
               </div>
             </div>
             <div style={{ background:'var(--border)', borderRadius:4, height:5 }}>
@@ -218,7 +208,8 @@ export default function DayView({ onDateChange }) {
           const s = sales[sh.id] || {}
           const q = parseFloat(s.quantity) || 0
           const r = parseFloat(s.returns) || 0
-          const p = parseFloat(s.price) || 0
+          // Используем default_price если цена ещё не задана для этого дня
+          const p = parseFloat(s.price) || parseFloat(sh.default_price) || 0
           const sum = (q - r) * p
           return (
             <div className="card" key={sh.id}>
@@ -232,19 +223,24 @@ export default function DayView({ onDateChange }) {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1.1fr', gap:6 }}>
                 <Field label="Продано">
                   <input className="input" type="number" inputMode="numeric" placeholder="шт"
-                    value={s.quantity || ''} onChange={e => updateSale(sh.id, 'quantity', parseInt(e.target.value) || 0)} />
+                    value={s.quantity || ''}
+                    onChange={e => updateSale(sh.id, 'quantity', parseInt(e.target.value) || 0)} />
                 </Field>
                 <Field label="↩ Возврат" labelColor="rgba(224,82,82,0.8)">
                   <input className="input" type="number" inputMode="numeric" placeholder="шт"
-                    value={s.returns || ''} onChange={e => updateSale(sh.id, 'returns', parseInt(e.target.value) || 0)}
+                    value={s.returns || ''}
+                    onChange={e => updateSale(sh.id, 'returns', parseInt(e.target.value) || 0)}
                     style={{ color:'var(--red)', borderColor: s.returns > 0 ? 'rgba(224,82,82,0.4)' : '' }} />
                 </Field>
                 <Field label="Цена (₸)">
-                  <input className="input" type="number" inputMode="decimal" placeholder="₸"
-                    value={s.price || ''} onChange={e => updateSale(sh.id, 'price', parseFloat(e.target.value) || 0)} />
+                  <input className="input" type="number" inputMode="decimal"
+                    placeholder={sh.default_price || '₸'}
+                    value={s.price || ''}
+                    onChange={e => updateSale(sh.id, 'price', parseFloat(e.target.value) || 0)} />
                 </Field>
                 <Field label="Оплата">
-                  <select className="select" value={s.payment_type || 'Наличка'} onChange={e => updateSale(sh.id, 'payment_type', e.target.value)}>
+                  <select className="select" value={s.payment_type || 'Наличка'}
+                    onChange={e => updateSale(sh.id, 'payment_type', e.target.value)}>
                     <option>Наличка</option>
                     <option>Каспи</option>
                     <option>Карта</option>
