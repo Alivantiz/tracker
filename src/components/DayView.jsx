@@ -397,37 +397,45 @@ function ProfitTile({ label, value, color, highlight }) {
 
 function MaterialPicker({ materials, onAdd }) {
   const [selId, setSelId] = useState('')
-  const [qty, setQty]     = useState('1')
+  const [qty, setQty]     = useState(1)
   const mat = materials.find(m => m.id === selId)
-  const preview = mat ? (parseFloat(qty) || 1) * mat.price_per_unit : 0
+  const preview = mat ? qty * mat.price_per_unit : 0
 
   function handleAdd() {
-    if (!selId || !qty) return
+    if (!selId) return
     onAdd(selId, qty)
-    setQty('1'); setSelId('')
+    setQty(1); setSelId('')
   }
 
   return (
     <div style={{ background:'rgba(245,131,74,0.04)', border:'1px solid rgba(245,131,74,0.2)', borderRadius:10, padding:10, marginBottom:8 }}>
       <div style={{ fontSize:10, color:'var(--orange)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:7 }}>Из справочника материалов</div>
-      <div style={{ display:'flex', gap:6, alignItems:'flex-end' }}>
-        <div style={{ flex:2 }}>
-          <div style={{ fontSize:9, color:'var(--label)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:3 }}>Материал</div>
-          <select className="select" value={selId} onChange={e => setSelId(e.target.value)}>
-            <option value="">Выбрать...</option>
-            {materials.map(m => (
-              <option key={m.id} value={m.id}>{m.name} ({m.price_per_unit} ₸/{m.unit})</option>
-            ))}
-          </select>
+
+      {/* Выбор материала */}
+      <select className="select" value={selId} onChange={e => { setSelId(e.target.value); setQty(1) }} style={{ marginBottom:8 }}>
+        <option value="">Выбрать материал...</option>
+        {materials.map(m => (
+          <option key={m.id} value={m.id}>{m.name} — {m.price_per_unit} ₸/{m.unit}</option>
+        ))}
+      </select>
+
+      {/* Количество + кнопка добавить */}
+      <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+        <div style={{ fontSize:9, color:'var(--label)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, whiteSpace:'nowrap' }}>
+          {mat ? mat.unit : 'Кол-во'}:
         </div>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:9, color:'var(--label)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:3 }}>Кол-во</div>
-          <input className="input" type="number" inputMode="decimal" value={qty}
-            onChange={e => setQty(e.target.value)} placeholder="1" />
+        <div style={{ display:'flex', alignItems:'center', gap:0, background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:8, overflow:'hidden' }}>
+          <button onClick={() => setQty(q => Math.max(1, q - 1))}
+            style={{ background:'none', border:'none', color:'var(--text)', fontSize:18, fontWeight:700, padding:'6px 14px', cursor:'pointer', lineHeight:1 }}>−</button>
+          <div style={{ minWidth:32, textAlign:'center', fontSize:15, fontWeight:800, color:'var(--text)', padding:'0 4px' }}>{qty}</div>
+          <button onClick={() => setQty(q => q + 1)}
+            style={{ background:'none', border:'none', color:'var(--text)', fontSize:18, fontWeight:700, padding:'6px 14px', cursor:'pointer', lineHeight:1 }}>+</button>
         </div>
         <button onClick={handleAdd} disabled={!selId}
-          style={{ background: selId ? 'var(--orange)' : 'var(--bg2)', border:'none', borderRadius:8, color: selId ? '#fff' : 'var(--muted)', padding:'8px 12px', fontWeight:700, cursor: selId ? 'pointer' : 'default', fontSize:13, whiteSpace:'nowrap' }}>
-          + {selId && mat ? fmtMoney(preview) : 'Добавить'}
+          style={{ flex:1, background: selId ? 'var(--orange)' : 'var(--bg2)', border:'none', borderRadius:8,
+            color: selId ? '#fff' : 'var(--muted)', padding:'8px 12px', fontWeight:700,
+            cursor: selId ? 'pointer' : 'default', fontSize:13, whiteSpace:'nowrap' }}>
+          {selId && mat ? `+ ${fmtMoney(preview)}` : 'Добавить'}
         </button>
       </div>
     </div>
