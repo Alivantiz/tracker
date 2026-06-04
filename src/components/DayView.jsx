@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabase'
 import { todayStr, fmtMoney, calcDayStats } from '../utils'
 
@@ -35,32 +35,39 @@ export default function DayView({ onDateChange }) {
     supabase.from('materials').select('*').order('sort_order').then(({ data }) => setMaterials(data || []))
   }, [])
 
-  const loadDay = useCallback(async () => {
-    setLoading(true)
-    let { data: day } = await supabase.from('days').select('id,baked').eq('date', date).maybeSingle()
-    if (!day) {
-      const { data: nd } = await supabase.from('days').insert({ date, baked: 0 }).select('id,baked').single()
-      day = nd
+  useEffect(() => {
+    let cancelled = false
+    async function loadDay() {
+      setLoading(true)
+      setBaked(0)
+      setSales({})
+      setExpenses([])
+      let { data: day } = await supabase.from('days').select('id,baked').eq('date', date).maybeSingle()
+      if (!day) {
+        const { data: nd } = await supabase.from('days').insert({ date, baked: 0 }).select('id,baked').single()
+        day = nd
+      }
+      if (cancelled) return
+      setDayId(day.id)
+      const dayBaked = day.baked || 0
+      setBaked(dayBaked)
+      if (!dayBaked && date === new Date().toISOString().slice(0,10)) { setBakedInput(''); setShowBakedModal(true) }
+      else setShowBakedModal(false)
+
+      const [{ data: salesData }, { data: expData }] = await Promise.all([
+        supabase.from('sales').select('*').eq('day_id', day.id),
+        supabase.from('expenses').select('*').eq('day_id', day.id).order('created_at'),
+      ])
+      if (cancelled) return
+      const map = {}
+      ;(salesData || []).forEach(s => { map[s.shop_id] = s })
+      setSales(map)
+      setExpenses(expData || [])
+      setLoading(false)
     }
-    setDayId(day.id)
-    setBaked(0)  // reset before loading
-    const dayBaked = day.baked || 0
-    setBaked(dayBaked)
-    if (!dayBaked && date === new Date().toISOString().slice(0,10)) { setBakedInput(''); setShowBakedModal(true) }
-    else setShowBakedModal(false)
-
-    const [{ data: salesData }, { data: expData }] = await Promise.all([
-      supabase.from('sales').select('*').eq('day_id', day.id),
-      supabase.from('expenses').select('*').eq('day_id', day.id).order('created_at'),
-    ])
-    const map = {}
-    ;(salesData || []).forEach(s => { map[s.shop_id] = s })
-    setSales(map)
-    setExpenses(expData || [])
-    setLoading(false)
+    loadDay()
+    return () => { cancelled = true }
   }, [date])
-
-  useEffect(() => { loadDay() }, [loadDay])
 
   function triggerSaveStatus() {
     setSaveStatus('saving')
@@ -196,7 +203,7 @@ export default function DayView({ onDateChange }) {
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
           <button onClick={() => setDate(prev => dateAdd(prev, -1))} style={navBtn}>‹</button>
           <div style={{ flex:1, textAlign:'center', fontSize:14, fontWeight:700, color:'var(--text)' }}>{dateFmt(date)}</div>
-          <button onClick={() => { const next = dateAdd(date, 1); setDate(next); }} style={navBtn}>›</button>
+          <button onClick={() => setDate(prev => dateAdd(prev, 1))} style={navBtn}>›</button>
           {!isToday && (
             <button onClick={() => setDate(todayStr())} style={{ ...navBtn, borderColor:'var(--accent)', color:'var(--accent)', fontSize:11, padding:'6px 10px' }}>Сегодня</button>
           )}
