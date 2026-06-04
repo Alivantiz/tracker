@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import DayView from './components/DayView'
+import TotalsView from './components/TotalsView'
 import HistoryView from './components/HistoryView'
 import SettingsView from './components/SettingsView'
 
@@ -21,13 +22,10 @@ function LoginScreen({ onLogin }) {
   }
 
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', minHeight: '100vh', padding: 32, gap: 24
-    }}>
-      <div style={{ fontSize: 48 }}>🫓</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: '#f5a623' }}>Лепёшки</div>
-      <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'100vh', padding:32, gap:24 }}>
+      <div style={{ fontSize:52 }}>🫓</div>
+      <div style={{ fontSize:24, fontWeight:800, color:'var(--accent)' }}>Лепёшки</div>
+      <div style={{ width:'100%', maxWidth:320, display:'flex', flexDirection:'column', gap:12 }}>
         <input
           className="input"
           type="password"
@@ -35,17 +33,11 @@ function LoginScreen({ onLogin }) {
           value={pw}
           onChange={e => setPw(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && submit()}
-          style={{
-            textAlign: 'center', fontSize: 18, padding: '12px',
-            border: err ? '1px solid #ef4444' : '1px solid #2a2d3a',
-            transition: 'border-color .2s'
-          }}
+          style={{ textAlign:'center', fontSize:18, padding:'13px', border: err ? '1px solid var(--red)' : '1px solid var(--border)' }}
           autoFocus
         />
-        <button className="btn btn-primary" onClick={submit} style={{ width: '100%', fontSize: 16, padding: 14 }}>
-          Войти
-        </button>
-        {err && <div style={{ textAlign: 'center', color: '#ef4444', fontSize: 13 }}>Неверный пароль</div>}
+        <button className="btn btn-primary" onClick={submit} style={{ width:'100%', fontSize:16, padding:14 }}>Войти</button>
+        {err && <div style={{ textAlign:'center', color:'var(--red)', fontSize:13 }}>Неверный пароль</div>}
       </div>
     </div>
   )
@@ -54,28 +46,27 @@ function LoginScreen({ onLogin }) {
 export default function App() {
   const [authed, setAuthed] = useState(!!sessionStorage.getItem(AUTH_KEY))
   const [tab, setTab] = useState('day')
+  const [dayContext, setDayContext] = useState(null) // shared date between Day and Totals
 
   if (!authed) return <LoginScreen onLogin={() => setAuthed(true)} />
 
   const tabs = [
-    { key: 'day',      icon: '📋', label: 'День' },
-    { key: 'history',  icon: '📅', label: 'История' },
-    { key: 'settings', icon: '⚙️',  label: 'Настройки' },
+    { key:'day',      icon:'📋', label:'День' },
+    { key:'totals',   icon:'📊', label:'Итоги' },
+    { key:'history',  icon:'📅', label:'История' },
+    { key:'settings', icon:'⚙️',  label:'Настройки' },
   ]
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', minHeight: '100vh' }}>
-      {tab === 'day'      && <DayView />}
+    <div style={{ maxWidth:480, margin:'0 auto', minHeight:'100vh' }}>
+      {tab === 'day'      && <DayView onDateChange={setDayContext} />}
+      {tab === 'totals'   && <TotalsView date={dayContext} />}
       {tab === 'history'  && <HistoryView />}
       {tab === 'settings' && <SettingsView />}
 
       <nav className="nav">
         {tabs.map(t => (
-          <button
-            key={t.key}
-            className={`nav-btn ${tab === t.key ? 'active' : ''}`}
-            onClick={() => setTab(t.key)}
-          >
+          <button key={t.key} className={`nav-btn ${tab === t.key ? 'active' : ''}`} onClick={() => setTab(t.key)}>
             <span className="icon">{t.icon}</span>
             {t.label}
           </button>
