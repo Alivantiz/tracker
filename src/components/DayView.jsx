@@ -430,10 +430,10 @@ function MaterialPicker({ materials, onAdd }) {
           {mat ? mat.unit : 'Кол-во'}:
         </div>
         <div style={{ display:'flex', alignItems:'center', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:8, overflow:'hidden' }}>
-          <button onClick={() => setQty(q => Math.max(1, q-1))}
+          <button onClick={() => setQty(q => Math.max(0.5, Math.round((q - 0.5) * 10) / 10))}
             style={{ background:'none', border:'none', color:'var(--text)', fontSize:18, fontWeight:700, padding:'6px 14px', cursor:'pointer', lineHeight:1 }}>−</button>
           <div style={{ minWidth:32, textAlign:'center', fontSize:15, fontWeight:800, color:'var(--text)', padding:'0 4px' }}>{qty}</div>
-          <button onClick={() => setQty(q => q+1)}
+          <button onClick={() => setQty(q => Math.round((q + 0.5) * 10) / 10)}
             style={{ background:'none', border:'none', color:'var(--text)', fontSize:18, fontWeight:700, padding:'6px 14px', cursor:'pointer', lineHeight:1 }}>+</button>
         </div>
         <button onClick={handleAdd} disabled={!selId}
