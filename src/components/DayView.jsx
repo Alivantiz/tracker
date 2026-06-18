@@ -14,7 +14,7 @@ function dateFmt(str) {
 
 export default function DayView({ onDateChange }) {
   const [date, setDate]               = useState(todayStr())
-  const [tab, setTab]                 = useState('shops') // shops | expenses
+  const [tab, setTab]                 = useState('shops')
   const [shops, setShops]             = useState([])
   const [materials, setMaterials]     = useState([])
   const [dayId, setDayId]             = useState(null)
@@ -51,9 +51,8 @@ export default function DayView({ onDateChange }) {
       setDayId(day.id)
       const dayBaked = day.baked || 0
       setBaked(dayBaked)
-      if (!dayBaked && date === new Date().toISOString().slice(0,10)) { setBakedInput(''); setShowBakedModal(true) }
+      if (!dayBaked && date === todayStr()) { setBakedInput(''); setShowBakedModal(true) }
       else setShowBakedModal(false)
-
       const [{ data: salesData }, { data: expData }] = await Promise.all([
         supabase.from('sales').select('*').eq('day_id', day.id),
         supabase.from('expenses').select('*').eq('day_id', day.id).order('created_at'),
@@ -150,7 +149,6 @@ export default function DayView({ onDateChange }) {
     await supabase.from('expenses').delete().eq('id', id)
   }
 
-  // Stats
   const salesArr = shops.map(sh => ({ ...sales[sh.id], shop_id: sh.id }))
   const stats = calcDayStats(salesArr, expenses, [], [])
   const { byPayment } = stats
@@ -158,7 +156,6 @@ export default function DayView({ onDateChange }) {
   const totalBonus = shops.reduce((a, sh) => a + (parseInt(sales[sh.id]?.bonus) || 0), 0)
   const remaining = Math.max(0, baked - stats.net - totalBonus)
   const progressPct = baked > 0 ? Math.min(100, Math.round(((stats.net + totalBonus) / baked) * 100)) : 0
-
   const doneShops = shops.filter(sh => (sales[sh.id]?.quantity || 0) > 0).length
 
   if (loading) return (
@@ -201,9 +198,22 @@ export default function DayView({ onDateChange }) {
 
         {/* Date nav */}
         <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-          <button onClick={() => setDate(prev => dateAdd(prev, -1))} style={navBtn}>‹</button>
-          <div style={{ flex:1, textAlign:'center', fontSize:14, fontWeight:700, color:'var(--text)' }}>{dateFmt(date)}</div>
-          <button onClick={() => setDate(prev => dateAdd(prev, 1))} style={navBtn}>›</button>
+          <button onClick={() => setDate(d => dateAdd(d, -1))} style={navBtn}>‹</button>
+
+          {/* Кликабельная дата → календарик */}
+          <div style={{ flex:1, position:'relative' }}>
+            <input
+              type="date"
+              value={date}
+              onChange={e => e.target.value && setDate(e.target.value)}
+              style={{ position:'absolute', inset:0, opacity:0, width:'100%', height:'100%', cursor:'pointer', zIndex:2 }}
+            />
+            <div style={{ textAlign:'center', fontSize:13, fontWeight:700, color:'var(--text)', padding:'7px 0', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', pointerEvents:'none' }}>
+              📅 {dateFmt(date)}
+            </div>
+          </div>
+
+          <button onClick={() => setDate(d => dateAdd(d, 1))} style={{ ...navBtn, opacity: isToday ? 0.25 : 1 }} disabled={isToday}>›</button>
           {!isToday && (
             <button onClick={() => setDate(todayStr())} style={{ ...navBtn, borderColor:'var(--accent)', color:'var(--accent)', fontSize:11, padding:'6px 10px' }}>Сегодня</button>
           )}
@@ -247,8 +257,8 @@ export default function DayView({ onDateChange }) {
           </div>
         )}
 
-        {/* ── TOP TABS ── */}
-        <div style={{ display:'flex', gap:4, marginTop:4 }}>
+        {/* TOP TABS */}
+        <div style={{ display:'flex', gap:4 }}>
           {TABS.map(t => (
             <button key={t.key} onClick={() => setTab(t.key)} style={{
               flex:1, padding:'7px 4px', border:'1px solid', borderRadius:8,
@@ -276,7 +286,9 @@ export default function DayView({ onDateChange }) {
             return (
               <div className="card" key={sh.id}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-                  <span style={{ fontWeight:700, fontSize:15 }}><span style={{ color:'var(--muted)', fontSize:12, fontWeight:600, marginRight:5 }}>#{idx+1}</span>{sh.name}</span>
+                  <span style={{ fontWeight:700, fontSize:15 }}>
+                    <span style={{ color:'var(--muted)', fontSize:12, fontWeight:600, marginRight:5 }}>#{idx+1}</span>{sh.name}
+                  </span>
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                     {b > 0 && <span style={{ fontSize:11, color:'var(--accent)' }}>🎁 {b} шт</span>}
                     <span style={{ color: sum>0?'var(--green)':sum<0?'var(--red)':'var(--muted)', fontWeight:700, fontSize:14 }}>
@@ -321,7 +333,6 @@ export default function DayView({ onDateChange }) {
             )
           })}
 
-          {/* Итог по магазинам */}
           <div style={{ background:'var(--bg2)', border:'1px solid var(--border2)', borderRadius:12, padding:'12px 14px', margin:'4px 0 8px' }}>
             <Row label="Продано" value={stats.sold+' шт'} />
             <Row label="↩ Возврат" value={stats.returns+' шт'} valColor="var(--red)" />
@@ -340,14 +351,12 @@ export default function DayView({ onDateChange }) {
       {/* ── TAB: РАСХОДЫ ── */}
       {tab === 'expenses' && (
         <div style={{ padding:'12px 12px 0' }}>
-          {materials.length > 0 && (
-            <MaterialPicker materials={materials} onAdd={addMaterialExpense} />
-          )}
-          {materials.length === 0 && (
-            <div style={{ background:'var(--bg2)', border:'1px dashed var(--border)', borderRadius:10, padding:14, textAlign:'center', color:'var(--muted)', fontSize:13, marginBottom:12 }}>
-              Добавьте материалы в Настройках → Справочник
-            </div>
-          )}
+          {materials.length > 0
+            ? <MaterialPicker materials={materials} onAdd={addMaterialExpense} />
+            : <div style={{ background:'var(--bg2)', border:'1px dashed var(--border)', borderRadius:10, padding:14, textAlign:'center', color:'var(--muted)', fontSize:13, marginBottom:12 }}>
+                Добавьте материалы в Настройках → Справочник
+              </div>
+          }
           {expenses.map(e => (
             <div className="card" key={e.id} style={{ borderColor:'rgba(245,131,74,0.25)', background:'rgba(245,131,74,0.04)', marginBottom:8 }}>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
@@ -373,39 +382,6 @@ export default function DayView({ onDateChange }) {
         </div>
       )}
 
-          <div style={{ height:1, background:'var(--border)', margin:'4px 0 8px' }} />
-
-          {/* Оплата */}
-          <div style={{ background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 14px', marginBottom:8 }}>
-            {activePayments.map(([type, amount]) => (
-              <Row key={type} label={(type==='Наличка'?'💵':'📱')+' '+type} value={fmtMoney(amount)} />
-            ))}
-            <div style={{ borderTop:'1px solid var(--border)', marginTop:6, paddingTop:6 }}>
-              <Row label="Итого выручка" value={fmtMoney(stats.revenue)} valColor="var(--accent)" bold size={15} />
-            </div>
-          </div>
-
-          {/* По магазинам */}
-          {shops.map((sh, idx) => {
-            const s = sales[sh.id]
-            if (!s || (!s.quantity && !s.returns)) return null
-            const net = (s.quantity||0)-(s.returns||0)
-            const sum = net*(s.price||0)
-            return (
-              <div key={sh.id} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px', marginBottom:6 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
-                  <span style={{ fontWeight:700, fontSize:14 }}>{sh.name}</span>
-                  <span style={{ fontWeight:700, color:sum>=0?'var(--green)':'var(--red)' }}>{fmtMoney(sum)}</span>
-                </div>
-                <div style={{ fontSize:12, color:'var(--muted)' }}>
-                  {s.quantity} шт{s.returns>0?` / ↩${s.returns}`:''}
-                  {s.bonus>0?` / 🎁${s.bonus}`:''} · {s.payment_type||'Наличка'}
-                </div>
-              </div>
-            )
-          })}
-
-
     </div>
   )
 }
@@ -418,7 +394,6 @@ function ProfitTile({ label, value, color, highlight }) {
     </div>
   )
 }
-
 
 function Row({ label, value, valColor, bold, size }) {
   return (
