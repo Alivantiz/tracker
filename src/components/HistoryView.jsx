@@ -3,20 +3,20 @@ import { supabase } from '../supabase'
 import { fmtDate, fmtMoney, fmtMonthLabel, calcDayStats } from '../utils'
 
 export default function HistoryView() {
-  const [days, setDays]   = useState([])
-  const [shops, setShops] = useState([])
+  const [days, setDays]     = useState([])
+  const [shops, setShops]   = useState([])
   const [loading, setLoading] = useState(true)
   const [openDay, setOpenDay] = useState(null)
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo]     = useState('')
 
   useEffect(() => {
     async function load() {
       const [{ data: daysData }, { data: shopsData }] = await Promise.all([
         supabase.from('days').select(`
           id, date,
-          sales ( id, shop_id, quantity, price, payment_type, returns ),
-          expenses ( id, amount, name ),
-          purchases ( id, amount, name ),
-          salaries ( id, amount, name )
+          sales ( id, shop_id, quantity, price, payment_type, returns, bonus ),
+          expenses ( id, amount, name )
         `).order('date', { ascending: false }),
         supabase.from('shops').select('*').order('sort_order'),
       ])
@@ -43,28 +43,65 @@ export default function HistoryView() {
     </div>
   )
 
+  // Фильтр по диапазону дат
+  const filtered = days.filter(d => {
+    if (dateFrom && d.date < dateFrom) return false
+    if (dateTo && d.date > dateTo) return false
+    return true
+  })
+
   const byMonth = {}
-  days.forEach(d => {
+  filtered.forEach(d => {
     const m = d.date.slice(0, 7)
     if (!byMonth[m]) byMonth[m] = []
     byMonth[m].push(d)
   })
 
+  function clearFilter() { setDateFrom(''); setDateTo('') }
+
   return (
     <div className="page fade-in">
-      <div className="header"><div style={{ fontSize:20, fontWeight:800 }}>История</div></div>
+      <div className="header">
+        <div style={{ fontSize:20, fontWeight:800, marginBottom:10 }}>История</div>
+
+        {/* Фильтр диапазона */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+          <div>
+            <div style={{ fontSize:9, color:'var(--muted)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:3 }}>С</div>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+              style={{ width:'100%', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', padding:'8px 10px', fontSize:13 }} />
+          </div>
+          <div>
+            <div style={{ fontSize:9, color:'var(--muted)', textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:3 }}>По</div>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+              style={{ width:'100%', background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text)', padding:'8px 10px', fontSize:13 }} />
+          </div>
+        </div>
+        {(dateFrom || dateTo) && (
+          <button onClick={clearFilter} style={{ marginTop:8, width:'100%', background:'none', border:'1px solid var(--border)', borderRadius:8, color:'var(--muted)', padding:'6px', fontSize:12, cursor:'pointer', fontWeight:700 }}>
+            ✕ Сбросить фильтр
+          </button>
+        )}
+      </div>
+
       <div style={{ padding:'12px 12px 0' }}>
+        {filtered.length === 0 && (
+          <div style={{ textAlign:'center', color:'var(--muted)', padding:'60px 0', fontSize:14 }}>
+            Нет записей за выбранный период
+          </div>
+        )}
+
         {Object.entries(byMonth).map(([month, mDays]) => {
           const mStats = mDays.reduce((acc, d) => {
-            const s = calcDayStats(d.sales, d.expenses, d.purchases, d.salaries)
+            const s = calcDayStats(d.sales, d.expenses, [], [])
             return {
-              sold: acc.sold + s.sold, returns: acc.returns + s.returns,
-              revenue: acc.revenue + s.revenue, profit: acc.profit + s.profit,
-              totalPurchases: acc.totalPurchases + s.totalPurchases,
+              sold: acc.sold + s.sold,
+              returns: acc.returns + s.returns,
+              revenue: acc.revenue + s.revenue,
+              profit: acc.profit + s.profit,
               totalExpenses: acc.totalExpenses + s.totalExpenses,
-              totalSalaries: acc.totalSalaries + s.totalSalaries,
             }
-          }, { sold:0, returns:0, revenue:0, profit:0, totalPurchases:0, totalExpenses:0, totalSalaries:0 })
+          }, { sold:0, returns:0, revenue:0, profit:0, totalExpenses:0 })
 
           return (
             <div key={month} style={{ marginBottom:24 }}>
@@ -80,18 +117,16 @@ export default function HistoryView() {
 
               <div style={{ background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:12, padding:12, marginBottom:10 }}>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-                  <MonthTile label="Продано" value={`${mStats.sold} шт`} />
+                  <MonthTile label="Продано"  value={`${mStats.sold} шт`} />
                   <MonthTile label="↩ Возврат" value={`${mStats.returns} шт`} color="var(--red)" />
-                  <MonthTile label="Выручка" value={fmtMoney(mStats.revenue)} color="var(--blue)" />
-                  <MonthTile label="Закупы" value={fmtMoney(mStats.totalPurchases)} color="var(--purple)" />
-                  <MonthTile label="Расходы" value={fmtMoney(mStats.totalExpenses)} color="var(--orange)" />
-                  <MonthTile label="Зарплата" value={fmtMoney(mStats.totalSalaries)} color="var(--blue)" />
+                  <MonthTile label="Выручка"  value={fmtMoney(mStats.revenue)} color="var(--blue)" />
+                  <MonthTile label="Расходы"  value={fmtMoney(mStats.totalExpenses)} color="var(--orange)" />
                   <MonthTile label="💰 Прибыль" value={fmtMoney(mStats.profit)} color={mStats.profit >= 0 ? 'var(--accent)' : 'var(--red)'} fullWidth />
                 </div>
               </div>
 
               {mDays.map(d => {
-                const s = calcDayStats(d.sales, d.expenses, d.purchases, d.salaries)
+                const s = calcDayStats(d.sales, d.expenses, [], [])
                 const isOpen = openDay === d.id
                 return (
                   <div key={d.id} style={{ marginBottom:6 }}>
@@ -133,22 +168,24 @@ function DayDetail({ day, shops, stats }) {
         const net = (s.quantity||0) - (s.returns||0)
         return (
           <Row key={s.id}>
-            <span>{shop?.name || '—'} — {s.quantity} шт{s.returns > 0 ? ` / ↩${s.returns}` : ''} × {fmtMoney(s.price)} <span style={{ color:'var(--muted)' }}>({s.payment_type})</span></span>
+            <span>
+              {shop?.name || '—'} — {s.quantity} шт
+              {s.returns > 0 ? ` / ↩${s.returns}` : ''}
+              {s.bonus > 0 ? ` / 🎁${s.bonus}` : ''}
+              {' '}× {fmtMoney(s.price)} <span style={{ color:'var(--muted)' }}>({s.payment_type})</span>
+            </span>
             <span style={{ color:'var(--green)', whiteSpace:'nowrap', marginLeft:8 }}>{fmtMoney(net * s.price)}</span>
           </Row>
         )
       })}
-      {day.purchases?.length > 0 && <>
-        <Label style={{ marginTop:8 }}>Закупы</Label>
-        {day.purchases.map(e => <Row key={e.id}><span style={{ color:'var(--purple)' }}>{e.name||'—'}</span><span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span></Row>)}
-      </>}
       {day.expenses?.length > 0 && <>
         <Label style={{ marginTop:8 }}>Расходы</Label>
-        {day.expenses.map(e => <Row key={e.id}><span style={{ color:'var(--orange)' }}>{e.name||'—'}</span><span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span></Row>)}
-      </>}
-      {day.salaries?.length > 0 && <>
-        <Label style={{ marginTop:8 }}>Зарплата</Label>
-        {day.salaries.map(e => <Row key={e.id}><span style={{ color:'var(--blue)' }}>{e.name||'—'}</span><span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span></Row>)}
+        {day.expenses.map(e => (
+          <Row key={e.id}>
+            <span style={{ color:'var(--orange)' }}>{e.name||'—'}</span>
+            <span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span>
+          </Row>
+        ))}
       </>}
       <div style={{ display:'flex', justifyContent:'space-between', marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', fontWeight:700 }}>
         <span>Прибыль</span>
