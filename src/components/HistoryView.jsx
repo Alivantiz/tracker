@@ -16,7 +16,7 @@ export default function HistoryView() {
         supabase.from('days').select(`
           id, date,
           sales ( id, shop_id, quantity, price, payment_type, returns, bonus ),
-          expenses ( id, amount, name )
+          expenses ( id, amount, name, category )
         `).order('date', { ascending: false }),
         supabase.from('shops').select('*').order('sort_order'),
       ])
@@ -94,14 +94,20 @@ export default function HistoryView() {
         {Object.entries(byMonth).map(([month, mDays]) => {
           const mStats = mDays.reduce((acc, d) => {
             const s = calcDayStats(d.sales, d.expenses, [], [])
+            const purchases = (d.expenses||[]).filter(e=>(e.category||'💸 Расходы')==='📦 Закупы').reduce((a,e)=>a+(e.amount||0),0)
+            const expenses2 = (d.expenses||[]).filter(e=>(e.category||'💸 Расходы')==='💸 Расходы').reduce((a,e)=>a+(e.amount||0),0)
+            const salaries  = (d.expenses||[]).filter(e=>(e.category||'💸 Расходы')==='👷 Зарплата').reduce((a,e)=>a+(e.amount||0),0)
             return {
               sold: acc.sold + s.sold,
               returns: acc.returns + s.returns,
               revenue: acc.revenue + s.revenue,
               profit: acc.profit + s.profit,
               totalExpenses: acc.totalExpenses + s.totalExpenses,
+              totalPurchases: acc.totalPurchases + purchases,
+              totalExpenses2: acc.totalExpenses2 + expenses2,
+              totalSalaries: acc.totalSalaries + salaries,
             }
-          }, { sold:0, returns:0, revenue:0, profit:0, totalExpenses:0 })
+          }, { sold:0, returns:0, revenue:0, profit:0, totalExpenses:0, totalPurchases:0, totalExpenses2:0, totalSalaries:0 })
 
           return (
             <div key={month} style={{ marginBottom:24 }}>
@@ -117,11 +123,13 @@ export default function HistoryView() {
 
               <div style={{ background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:12, padding:12, marginBottom:10 }}>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
-                  <MonthTile label="Продано"  value={`${mStats.sold} шт`} />
-                  <MonthTile label="↩ Возврат" value={`${mStats.returns} шт`} color="var(--red)" />
-                  <MonthTile label="Выручка"  value={fmtMoney(mStats.revenue)} color="var(--blue)" />
-                  <MonthTile label="Расходы"  value={fmtMoney(mStats.totalExpenses)} color="var(--orange)" />
-                  <MonthTile label="💰 Прибыль" value={fmtMoney(mStats.profit)} color={mStats.profit >= 0 ? 'var(--accent)' : 'var(--red)'} fullWidth />
+                  <MonthTile label="Продано"     value={`${mStats.sold} шт`} />
+                  <MonthTile label="↩ Возврат"   value={`${mStats.returns} шт`} color="var(--red)" />
+                  <MonthTile label="Выручка"     value={fmtMoney(mStats.revenue)} color="var(--blue)" />
+                  <MonthTile label="📦 Закупы"   value={fmtMoney(mStats.totalPurchases)} color="var(--purple)" />
+                  <MonthTile label="💸 Расходы"  value={fmtMoney(mStats.totalExpenses2)} color="var(--orange)" />
+                  <MonthTile label="👷 Зарплата" value={fmtMoney(mStats.totalSalaries)} color="var(--blue)" />
+                  <MonthTile label="💰 Прибыль"  value={fmtMoney(mStats.profit)} color={mStats.profit >= 0 ? 'var(--accent)' : 'var(--red)'} fullWidth />
                 </div>
               </div>
 
@@ -178,15 +186,25 @@ function DayDetail({ day, shops, stats }) {
           </Row>
         )
       })}
-      {day.expenses?.length > 0 && <>
-        <Label style={{ marginTop:8 }}>Расходы</Label>
-        {day.expenses.map(e => (
-          <Row key={e.id}>
-            <span style={{ color:'var(--orange)' }}>{e.name||'—'}</span>
-            <span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span>
-          </Row>
-        ))}
-      </>}
+      {day.expenses?.length > 0 && (() => {
+        const cats = ['📦 Закупы','💸 Расходы','👷 Зарплата']
+        const catColor = { '📦 Закупы':'var(--purple)','💸 Расходы':'var(--orange)','👷 Зарплата':'var(--blue)' }
+        return cats.map(cat => {
+          const items = day.expenses.filter(e => (e.category||'💸 Расходы') === cat)
+          if (!items.length) return null
+          return (
+            <div key={cat}>
+              <Label style={{ marginTop:8 }}>{cat}</Label>
+              {items.map(e => (
+                <Row key={e.id}>
+                  <span style={{ color:catColor[cat] }}>{e.name||'—'}</span>
+                  <span style={{ color:'var(--red)', whiteSpace:'nowrap', marginLeft:8 }}>− {fmtMoney(e.amount)}</span>
+                </Row>
+              ))}
+            </div>
+          )
+        })
+      })()}
       <div style={{ display:'flex', justifyContent:'space-between', marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', fontWeight:700 }}>
         <span>Прибыль</span>
         <span style={{ color: stats.profit >= 0 ? 'var(--green)' : 'var(--red)', fontSize:15 }}>{fmtMoney(stats.profit)}</span>
