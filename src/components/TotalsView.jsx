@@ -101,6 +101,7 @@ export default function TotalsView({ date }) {
               <Tile label="📦 Закупы"   value={fmtMoney(totalPurchases)} color="var(--purple)" border="rgba(165,123,245,0.3)" bg="rgba(165,123,245,0.06)" />
               <Tile label="💸 Расходы"  value={fmtMoney(totalExpenses2)} color="var(--orange)" border="rgba(245,131,74,0.3)"  bg="rgba(245,131,74,0.06)" />
               <Tile label="👷 Зарплата" value={fmtMoney(totalSalaries)}  color="var(--blue)"   border="rgba(91,138,245,0.3)"  bg="rgba(91,138,245,0.06)" fullWidth />
+              <Tile label="Итого затраты" value={fmtMoney(totalPurchases+totalExpenses2+totalSalaries)} color="var(--red)" border="rgba(224,82,82,0.3)" bg="rgba(224,82,82,0.06)" fullWidth />
             </div>
 
             <Divider />
