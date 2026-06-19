@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
+const CATS = ['📦 Закупы', '💸 Расходы', '👷 Зарплата']
+const CAT_COLOR = { '📦 Закупы':'var(--purple)', '💸 Расходы':'var(--orange)', '👷 Зарплата':'var(--blue)' }
+
 export default function SettingsView() {
-  const [shops, setShops]       = useState([])
+  const [shops, setShops]         = useState([])
   const [materials, setMaterials] = useState([])
-  const [newShop, setNewShop]   = useState('')
-  const [editShop, setEditShop] = useState(null)
-  const [editMat, setEditMat]   = useState(null)
-  const [newMat, setNewMat]     = useState({ name:'', unit:'шт', price_per_unit:'' })
-  const [loading, setLoading]   = useState(true)
-  const [toast, setToast]       = useState('')
+  const [newShop, setNewShop]     = useState('')
+  const [editShop, setEditShop]   = useState(null)
+  const [editMat, setEditMat]     = useState(null)
+  const [newMat, setNewMat]       = useState({ name:'', unit:'шт', price_per_unit:'', category:'💸 Расходы' })
+  const [loading, setLoading]     = useState(true)
+  const [toast, setToast]         = useState('')
 
   useEffect(() => {
     async function load() {
@@ -46,7 +49,7 @@ export default function SettingsView() {
     setShops(prev => prev.filter(s => s.id !== id)); showToast('Удалено')
   }
 
-  // ── Materials (справочник расходов) ──
+  // ── Materials ──
   async function addMaterial() {
     const name = newMat.name.trim()
     if (!name) return
@@ -54,16 +57,17 @@ export default function SettingsView() {
     const { data } = await supabase.from('materials').insert({
       name, unit: newMat.unit || 'шт',
       price_per_unit: parseFloat(newMat.price_per_unit) || 0,
+      category: newMat.category || '💸 Расходы',
       sort_order: maxOrder + 1
     }).select().single()
-    if (data) { setMaterials(prev => [...prev, data]); setNewMat({ name:'', unit:'шт', price_per_unit:'' }); showToast('Добавлено') }
+    if (data) { setMaterials(prev => [...prev, data]); setNewMat({ name:'', unit:'шт', price_per_unit:'', category:'💸 Расходы' }); showToast('Добавлено') }
   }
   async function saveMatEdit() {
     if (!editMat?.name.trim()) return
     await supabase.from('materials').update({
-      name: editMat.name,
-      unit: editMat.unit,
-      price_per_unit: parseFloat(editMat.price_per_unit) || 0
+      name: editMat.name, unit: editMat.unit,
+      price_per_unit: parseFloat(editMat.price_per_unit) || 0,
+      category: editMat.category || '💸 Расходы'
     }).eq('id', editMat.id)
     setMaterials(prev => prev.map(m => m.id === editMat.id ? { ...m, ...editMat, price_per_unit: parseFloat(editMat.price_per_unit) || 0 } : m))
     setEditMat(null); showToast('Сохранено')
@@ -135,54 +139,78 @@ export default function SettingsView() {
         {/* ── Справочник расходов ── */}
         <STitle style={{ marginTop:24 }}>📦 Справочник расходов</STitle>
         <div style={{ fontSize:12, color:'var(--muted)', marginBottom:10 }}>
-          Задай название, единицу и цену — в день выбираешь и вводишь количество стрелками
+          Задай категорию, единицу и цену — при добавлении расхода выбираешь и вводишь количество
         </div>
-        {materials.map(m => (
-          <div className="card" key={m.id}>
-            {editMat?.id === m.id ? (
-              <div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:8 }}>
-                  <div><Lbl>Название</Lbl>
-                    <input className="input" value={editMat.name}
-                      onChange={e => setEditMat({ ...editMat, name: e.target.value })} autoFocus />
-                  </div>
-                  <div><Lbl>Ед. изм.</Lbl>
-                    <input className="input" value={editMat.unit}
-                      onChange={e => setEditMat({ ...editMat, unit: e.target.value })} placeholder="мешок" />
-                  </div>
-                  <div><Lbl>Цена за ед. (₸)</Lbl>
-                    <input className="input" type="number" inputMode="decimal"
-                      value={editMat.price_per_unit || ''}
-                      onChange={e => setEditMat({ ...editMat, price_per_unit: e.target.value })} />
-                  </div>
-                </div>
-                <Row2><Btn color="var(--green)" onClick={saveMatEdit}>Сохранить</Btn><Btn onClick={() => setEditMat(null)}>Отмена</Btn></Row2>
-              </div>
-            ) : (
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontSize:14, fontWeight:700 }}>{m.name}</div>
-                  <div style={{ fontSize:12, color:'var(--muted)', marginTop:2 }}>
-                    {m.price_per_unit > 0
-                      ? <>1 {m.unit} = <span style={{ color:'var(--accent)', fontWeight:700 }}>{m.price_per_unit} ₸</span></>
-                      : <span style={{ color:'var(--muted)' }}>цена не задана</span>
-                    }
-                  </div>
-                </div>
-                <button onClick={() => setEditMat({ ...m })} style={ib('var(--accent)')}>✏️</button>
-                <button onClick={() => deleteMaterial(m.id)} style={ib('var(--red)')}>🗑</button>
-              </div>
-            )}
-          </div>
-        ))}
 
+        {/* Группировка по категориям */}
+        {CATS.map(cat => {
+          const catMats = materials.filter(m => (m.category || '💸 Расходы') === cat)
+          if (catMats.length === 0) return null
+          return (
+            <div key={cat} style={{ marginBottom:12 }}>
+              <div style={{ fontSize:10, color: CAT_COLOR[cat], textTransform:'uppercase', letterSpacing:.8, fontWeight:700, marginBottom:6 }}>{cat}</div>
+              {catMats.map(m => (
+                <div className="card" key={m.id} style={{ borderColor: CAT_COLOR[cat]+'30', marginBottom:6 }}>
+                  {editMat?.id === m.id ? (
+                    <div>
+                      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+                        <div><Lbl>Название</Lbl>
+                          <input className="input" value={editMat.name}
+                            onChange={e => setEditMat({ ...editMat, name: e.target.value })} autoFocus />
+                        </div>
+                        <div><Lbl>Ед. изм.</Lbl>
+                          <input className="input" value={editMat.unit}
+                            onChange={e => setEditMat({ ...editMat, unit: e.target.value })} placeholder="мешок" />
+                        </div>
+                        <div><Lbl>Цена за ед. (₸)</Lbl>
+                          <input className="input" type="number" inputMode="decimal"
+                            value={editMat.price_per_unit || ''}
+                            onChange={e => setEditMat({ ...editMat, price_per_unit: e.target.value })} />
+                        </div>
+                        <div><Lbl>Категория</Lbl>
+                          <select className="select" value={editMat.category || '💸 Расходы'}
+                            onChange={e => setEditMat({ ...editMat, category: e.target.value })}>
+                            {CATS.map(c => <option key={c}>{c}</option>)}
+                          </select>
+                        </div>
+                      </div>
+                      <Row2><Btn color="var(--green)" onClick={saveMatEdit}>Сохранить</Btn><Btn onClick={() => setEditMat(null)}>Отмена</Btn></Row2>
+                    </div>
+                  ) : (
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:14, fontWeight:700 }}>{m.name}</div>
+                        <div style={{ fontSize:12, color:'var(--muted)', marginTop:2 }}>
+                          {m.price_per_unit > 0
+                            ? <>1 {m.unit} = <span style={{ color:'var(--accent)', fontWeight:700 }}>{m.price_per_unit} ₸</span></>
+                            : <span>цена не задана</span>
+                          }
+                        </div>
+                      </div>
+                      <button onClick={() => setEditMat({ ...m })} style={ib('var(--accent)')}>✏️</button>
+                      <button onClick={() => deleteMaterial(m.id)} style={ib('var(--red)')}>🗑</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )
+        })}
+
+        {/* Форма добавления */}
         <div className="card" style={{ border:'1px dashed var(--border)', marginBottom:16 }}>
           <div style={{ fontSize:11, color:'var(--muted)', fontWeight:700, marginBottom:8 }}>Добавить в справочник</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:8 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
             <div><Lbl>Название</Lbl>
               <input className="input" value={newMat.name} placeholder="Мука"
                 onChange={e => setNewMat(p => ({ ...p, name: e.target.value }))}
                 onKeyDown={e => e.key==='Enter' && addMaterial()} />
+            </div>
+            <div><Lbl>Категория</Lbl>
+              <select className="select" value={newMat.category}
+                onChange={e => setNewMat(p => ({ ...p, category: e.target.value }))}>
+                {CATS.map(c => <option key={c}>{c}</option>)}
+              </select>
             </div>
             <div><Lbl>Ед. изм.</Lbl>
               <input className="input" value={newMat.unit} placeholder="мешок"
