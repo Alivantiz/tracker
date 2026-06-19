@@ -128,8 +128,8 @@ export default function HistoryView() {
                   <MonthTile label="Выручка"     value={fmtMoney(mStats.revenue)} color="var(--blue)" />
                   <MonthTile label="📦 Закупы"   value={fmtMoney(mStats.totalPurchases)} color="var(--purple)" />
                   <MonthTile label="💸 Расходы"  value={fmtMoney(mStats.totalExpenses2)} color="var(--orange)" />
-                  <MonthTile label="👷 Зарплата" value={fmtMoney(mStats.totalSalaries)} color="var(--blue)" />
-                  <MonthTile label="Итого затраты" value={fmtMoney(mStats.totalPurchases+mStats.totalExpenses2+mStats.totalSalaries)} color="var(--red)" fullWidth />
+                  <MonthTile label="👷 Зарплата"   value={fmtMoney(mStats.totalSalaries)} color="var(--blue)" />
+                  <MonthTile label="Итого затраты" value={fmtMoney(mStats.totalPurchases+mStats.totalExpenses2+mStats.totalSalaries)} color="var(--red)" />
                   <MonthTile label="💰 Прибыль"  value={fmtMoney(mStats.profit)} color={mStats.profit >= 0 ? 'var(--accent)' : 'var(--red)'} fullWidth />
                 </div>
               </div>
