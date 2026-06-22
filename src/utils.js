@@ -21,17 +21,19 @@ export function fmtMonthLabel(ym) {
 }
 
 export function calcDayStats(sales, expenses, purchases, salaries) {
-  let sold = 0, returns = 0, revenue = 0
-  let byPayment = { 'Наличка': 0, 'Каспи': 0, 'Карта': 0 }
+  let sold = 0, returns = 0, bonus = 0, revenue = 0
+  let byPayment = { 'Наличка': 0, 'Каспи': 0 }
 
   ;(sales || []).forEach(s => {
-    const q = s.quantity || 0
-    const r = s.returns || 0
-    const p = s.price || 0
+    const q = Number(s.quantity) || 0
+    const r = Number(s.returns) || 0
+    const b = Number(s.bonus) || 0
+    const p = Number(s.price) || 0
     const net = q - r
     const sum = net * p
     sold += q
     returns += r
+    bonus += b
     revenue += sum
     const pt = s.payment_type || 'Наличка'
     if (byPayment[pt] !== undefined) byPayment[pt] += sum
@@ -43,10 +45,31 @@ export function calcDayStats(sales, expenses, purchases, salaries) {
   const totalSalaries  = (salaries  || []).reduce((a, e) => a + (e.amount || 0), 0)
   const totalCosts = totalExpenses + totalPurchases + totalSalaries
 
+  const net = sold - returns
   return {
-    sold, returns, net: sold - returns, revenue,
+    // штуки
+    sold, returns, bonus,
+    net,              // чистые продажи = продано − возврат
+    given: net + bonus, // выдано = чистые + бонус (всё, что ушло из печи)
+    revenue,
     byPayment,
+    // деньги
     totalExpenses, totalPurchases, totalSalaries, totalCosts,
     profit: revenue - totalCosts
   }
+}
+
+// Остаток лепёшек за день = испечено + перенос со вчера − выдано (не меньше 0).
+// Перенос (carryIn) = остаток предыдущего дня (хлеб быстро портится — переносим
+// только с непосредственно предыдущего дня, без цепочки за несколько дней).
+export function dayRemaining(baked, carryIn, given) {
+  return Math.max(0, (Number(baked) || 0) + (Number(carryIn) || 0) - (Number(given) || 0))
+}
+
+// Сколько лепёшек «выдано» (чистые + бонус) по сырым строкам продаж.
+export function calcGiven(sales) {
+  return (sales || []).reduce(
+    (a, s) => a + ((Number(s.quantity) || 0) - (Number(s.returns) || 0)) + (Number(s.bonus) || 0),
+    0
+  )
 }

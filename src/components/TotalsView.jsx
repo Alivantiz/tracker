@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { todayStr, fmtMoney, fmtDate, calcDayStats } from '../utils'
+import { todayStr, fmtMoney, fmtDate, calcDayStats, calcGiven, dayRemaining } from '../utils'
 
 const PAY_ICON   = { 'Наличка':'💵', 'Каспи':'📱', 'Карта':'💳' }
 const PAY_COLOR  = { 'Наличка':'var(--green)', 'Каспи':'var(--blue)', 'Карта':'var(--purple)' }
@@ -17,16 +17,20 @@ export default function TotalsView({ date }) {
     async function load() {
       const [{ data: shopsData }, { data: day }] = await Promise.all([
         supabase.from('shops').select('*').order('sort_order'),
-        supabase.from('days').select('id').eq('date', d).maybeSingle(),
+        supabase.from('days').select('id,baked').eq('date', d).maybeSingle(),
       ])
       setShops(shopsData || [])
       if (!day) { setData(null); setLoading(false); return }
 
-      const [{ data: sales }, { data: expenses }] = await Promise.all([
+      const [{ data: sales }, { data: expenses }, { data: prevDays }] = await Promise.all([
         supabase.from('sales').select('*').eq('day_id', day.id),
         supabase.from('expenses').select('*').eq('day_id', day.id),
+        supabase.from('days').select('date, baked, sales ( quantity, returns, bonus )')
+          .lt('date', d).order('date', { ascending: false }).limit(1),
       ])
-      setData({ sales: sales||[], expenses: expenses||[] })
+      const prev = prevDays?.[0]
+      const carryIn = prev ? dayRemaining(prev.baked, 0, calcGiven(prev.sales)) : 0
+      setData({ sales: sales||[], expenses: expenses||[], baked: day.baked || 0, carryIn })
       setLoading(false)
     }
     load()
@@ -50,6 +54,11 @@ export default function TotalsView({ date }) {
   const stats = data ? calcDayStats(data.sales, data.expenses, [], []) : null
   const activePayments = stats ? Object.entries(stats.byPayment).filter(([, v]) => v !== 0) : []
 
+  const baked = data?.baked || 0
+  const carryIn = data?.carryIn || 0
+  const available = baked + carryIn
+  const remaining = stats ? dayRemaining(baked, carryIn, stats.given) : 0
+
   return (
     <div className="page fade-in">
       <div className="header">
@@ -69,8 +78,23 @@ export default function TotalsView({ date }) {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
               <Tile label="Продано"       value={`${stats.sold} шт`} />
               <Tile label="↩ Возврат"    value={`${stats.returns} шт`} color="var(--red)" border="rgba(224,82,82,0.3)" bg="rgba(224,82,82,0.06)" />
-              <Tile label="Чистые продажи" value={`${stats.net} шт`} color="var(--green)" border="rgba(76,175,125,0.3)" bg="rgba(76,175,125,0.06)" fullWidth />
+              <Tile label="Чистые продажи" value={`${stats.net} шт`} color="var(--green)" border="rgba(76,175,125,0.3)" bg="rgba(76,175,125,0.06)"
+                fullWidth={stats.bonus === 0} />
+              {stats.bonus > 0 && (
+                <Tile label="🎁 Бонус" value={`${stats.bonus} шт`} color="var(--accent)" border="rgba(245,166,35,0.3)" bg="rgba(245,166,35,0.06)" />
+              )}
             </div>
+
+            {/* Лепёшки: испёк / перенос / выдано / остаток */}
+            {available > 0 && (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+                <Tile label="🥖 Испёк" value={`${baked} шт`} />
+                {carryIn > 0 && <Tile label="⤵ Перенос со вчера" value={`${carryIn} шт`} color="var(--blue)" border="rgba(91,138,245,0.3)" bg="rgba(91,138,245,0.06)" />}
+                <Tile label="📤 Выдано" value={`${stats.given} шт`} color="var(--green)" border="rgba(76,175,125,0.3)" bg="rgba(76,175,125,0.06)" fullWidth={carryIn === 0} />
+                <Tile label="📦 Остаток" value={`${remaining} шт`} color={remaining > 0 ? 'var(--accent)' : 'var(--green)'}
+                  border={remaining > 0 ? 'rgba(245,166,35,0.3)' : 'rgba(76,175,125,0.3)'} bg={remaining > 0 ? 'rgba(245,166,35,0.06)' : 'rgba(76,175,125,0.06)'} fullWidth />
+              </div>
+            )}
 
             <Divider />
 
@@ -121,12 +145,12 @@ export default function TotalsView({ date }) {
             </div>
 
             {/* По магазинам */}
-            {data.sales.some(s => s.quantity>0||s.returns>0) && (
+            {data.sales.some(s => s.quantity>0||s.returns>0||s.bonus>0) && (
               <>
                 <div style={{ fontSize:10, color:'var(--muted)', textTransform:'uppercase', letterSpacing:1.5, fontWeight:700, marginBottom:8 }}>🏪 По магазинам</div>
                 {shops.map(sh => {
                   const s = data.sales.find(x => x.shop_id===sh.id)
-                  if (!s||(!s.quantity&&!s.returns)) return null
+                  if (!s||(!s.quantity&&!s.returns&&!s.bonus)) return null
                   const net = (s.quantity||0)-(s.returns||0)
                   const sum = net*(s.price||0)
                   const pt = s.payment_type||'Наличка'
@@ -143,6 +167,7 @@ export default function TotalsView({ date }) {
                       </div>
                       <div style={{ fontSize:11, color:'var(--muted)', marginTop:6 }}>
                         Цена: {fmtMoney(s.price)} · Чистых: {net} шт
+                        {s.bonus > 0 && <span style={{ color:'var(--accent)' }}> · 🎁 {s.bonus} шт</span>}
                       </div>
                     </div>
                   )

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { fmtDate, fmtMoney, fmtMonthLabel, calcDayStats } from '../utils'
+import { fmtDate, fmtMoney, fmtMonthLabel, calcDayStats, calcGiven, dayRemaining } from '../utils'
 
 export default function HistoryView() {
   const [days, setDays]     = useState([])
@@ -14,7 +14,7 @@ export default function HistoryView() {
     async function load() {
       const [{ data: daysData }, { data: shopsData }] = await Promise.all([
         supabase.from('days').select(`
-          id, date,
+          id, date, baked,
           sales ( id, shop_id, quantity, price, payment_type, returns, bonus ),
           expenses ( id, amount, name, category )
         `).order('date', { ascending: false }),
@@ -42,6 +42,14 @@ export default function HistoryView() {
       </div>
     </div>
   )
+
+  // Перенос остатка: days отсортированы по убыванию даты, поэтому
+  // предыдущий записанный день для days[i] — это days[i+1].
+  const carryByDay = {}
+  for (let i = 0; i < days.length; i++) {
+    const prev = days[i + 1]
+    carryByDay[days[i].id] = prev ? dayRemaining(prev.baked, 0, calcGiven(prev.sales)) : 0
+  }
 
   // Фильтр по диапазону дат
   const filtered = days.filter(d => {
@@ -100,6 +108,8 @@ export default function HistoryView() {
             return {
               sold: acc.sold + s.sold,
               returns: acc.returns + s.returns,
+              bonus: acc.bonus + s.bonus,
+              baked: acc.baked + (d.baked || 0),
               revenue: acc.revenue + s.revenue,
               profit: acc.profit + s.profit,
               totalExpenses: acc.totalExpenses + s.totalExpenses,
@@ -107,7 +117,7 @@ export default function HistoryView() {
               totalExpenses2: acc.totalExpenses2 + expenses2,
               totalSalaries: acc.totalSalaries + salaries,
             }
-          }, { sold:0, returns:0, revenue:0, profit:0, totalExpenses:0, totalPurchases:0, totalExpenses2:0, totalSalaries:0 })
+          }, { sold:0, returns:0, bonus:0, baked:0, revenue:0, profit:0, totalExpenses:0, totalPurchases:0, totalExpenses2:0, totalSalaries:0 })
 
           return (
             <div key={month} style={{ marginBottom:24 }}>
@@ -125,6 +135,8 @@ export default function HistoryView() {
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:6 }}>
                   <MonthTile label="Продано"     value={`${mStats.sold} шт`} />
                   <MonthTile label="↩ Возврат"   value={`${mStats.returns} шт`} color="var(--red)" />
+                  <MonthTile label="🥖 Испёк"    value={`${mStats.baked} шт`} />
+                  {mStats.bonus > 0 && <MonthTile label="🎁 Бонус" value={`${mStats.bonus} шт`} color="var(--accent)" />}
                   <MonthTile label="Выручка"     value={fmtMoney(mStats.revenue)} color="var(--blue)" />
                   <MonthTile label="📦 Закупы"   value={fmtMoney(mStats.totalPurchases)} color="var(--purple)" />
                   <MonthTile label="💸 Расходы"  value={fmtMoney(mStats.totalExpenses2)} color="var(--orange)" />
@@ -146,7 +158,9 @@ export default function HistoryView() {
                     }}>
                       <div style={{ display:'flex', alignItems:'center', gap:10 }}>
                         <span style={{ fontSize:15, fontWeight:700 }}>{fmtDate(d.date)}</span>
-                        <span style={{ fontSize:11, color:'var(--muted)' }}>{s.net} шт</span>
+                        <span style={{ fontSize:11, color:'var(--muted)' }}>
+                          {s.net} шт{s.bonus > 0 && <span style={{ color:'var(--accent)' }}> +🎁{s.bonus}</span>}
+                        </span>
                       </div>
                       <div style={{ display:'flex', gap:10, alignItems:'center' }}>
                         <span style={{ fontSize:12, color:'var(--muted)' }}>{fmtMoney(s.revenue)}</span>
@@ -156,7 +170,7 @@ export default function HistoryView() {
                         <span style={{ color:'var(--muted)', fontSize:11 }}>{isOpen ? '▲' : '▼'}</span>
                       </div>
                     </button>
-                    {isOpen && <DayDetail day={d} shops={shops} stats={s} />}
+                    {isOpen && <DayDetail day={d} shops={shops} stats={s} carryIn={carryByDay[d.id]} />}
                   </div>
                 )
               })}
@@ -168,11 +182,13 @@ export default function HistoryView() {
   )
 }
 
-function DayDetail({ day, shops, stats }) {
+function DayDetail({ day, shops, stats, carryIn = 0 }) {
+  const baked = day.baked || 0
+  const remaining = dayRemaining(baked, carryIn, stats.given)
   return (
     <div style={{ background:'#13151e', border:'1px solid var(--border)', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'12px 14px' }}>
       <Label>Продажи</Label>
-      {day.sales.filter(s => s.quantity > 0 || s.returns > 0).map(s => {
+      {day.sales.filter(s => s.quantity > 0 || s.returns > 0 || s.bonus > 0).map(s => {
         const shop = shops.find(sh => sh.id === s.shop_id)
         const net = (s.quantity||0) - (s.returns||0)
         return (
@@ -206,6 +222,14 @@ function DayDetail({ day, shops, stats }) {
           )
         })
       })()}
+      {baked > 0 && (
+        <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', fontSize:12, color:'var(--muted)' }}>
+          🥖 Испёк {baked}{carryIn > 0 && <span style={{ color:'var(--blue)' }}> +{carryIn} вчера</span>}
+          {' · '}📤 Выдано <span style={{ color:'var(--green)' }}>{stats.given}</span>
+          {stats.bonus > 0 && <span style={{ color:'var(--accent)' }}> (вкл. 🎁{stats.bonus})</span>}
+          {' · '}📦 Остаток <span style={{ color: remaining > 0 ? 'var(--accent)' : 'var(--green)' }}>{remaining}</span> шт
+        </div>
+      )}
       <div style={{ display:'flex', justifyContent:'space-between', marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', fontWeight:700 }}>
         <span>Прибыль</span>
         <span style={{ color: stats.profit >= 0 ? 'var(--green)' : 'var(--red)', fontSize:15 }}>{fmtMoney(stats.profit)}</span>
