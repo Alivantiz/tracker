@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabase'
-import { todayStr, fmtMoney, calcDayStats, calcGiven, dayRemaining } from '../utils'
+import { todayStr, fmtMoney, calcDayStats, dayRemaining } from '../utils'
 
 function dateAdd(str, days) {
   const d = new Date(str + 'T00:00:00')
@@ -19,8 +19,6 @@ export default function DayView({ onDateChange }) {
   const [materials, setMaterials]     = useState([])
   const [dayId, setDayId]             = useState(null)
   const [baked, setBaked]             = useState(0)
-  const [carryIn, setCarryIn]         = useState(0)   // перенос остатка со вчера (шт)
-  const [prevDate, setPrevDate]       = useState(null)
   const [showBakedModal, setShowBakedModal] = useState(false)
   const [bakedInput, setBakedInput]   = useState('')
   const [sales, setSales]             = useState({})
@@ -42,8 +40,6 @@ export default function DayView({ onDateChange }) {
     async function loadDay() {
       setLoading(true)
       setBaked(0)
-      setCarryIn(0)
-      setPrevDate(null)
       setSales({})
       setExpenses([])
       let { data: day } = await supabase.from('days').select('id,baked').eq('date', date).maybeSingle()
@@ -66,21 +62,6 @@ export default function DayView({ onDateChange }) {
       ;(salesData || []).forEach(s => { map[s.shop_id] = s })
       setSales(map)
       setExpenses(expData || [])
-
-      // Перенос остатка с предыдущего дня (непроданные лепёшки)
-      const { data: prevDays } = await supabase
-        .from('days')
-        .select('date, baked, sales ( quantity, returns, bonus )')
-        .lt('date', date)
-        .order('date', { ascending: false })
-        .limit(1)
-      if (cancelled) return
-      const prev = prevDays?.[0]
-      if (prev) {
-        const rem = dayRemaining(prev.baked, 0, calcGiven(prev.sales))
-        setCarryIn(rem)
-        setPrevDate(rem > 0 ? prev.date : null)
-      }
 
       setLoading(false)
     }
@@ -175,8 +156,8 @@ export default function DayView({ onDateChange }) {
   const { byPayment } = stats
   const activePayments = Object.entries(byPayment).filter(([, v]) => v !== 0)
   const totalBonus = stats.bonus
-  const available = baked + carryIn                       // испёк + перенос со вчера
-  const remaining = dayRemaining(baked, carryIn, stats.given)
+  const available = baked
+  const remaining = dayRemaining(baked, stats.given)
   const progressPct = available > 0 ? Math.min(100, Math.round((stats.given / available) * 100)) : 0
   const doneShops = shops.filter(sh => (sales[sh.id]?.quantity || 0) > 0).length
 
@@ -261,7 +242,6 @@ export default function DayView({ onDateChange }) {
                 🥖 <span style={{ color:'var(--green)', fontWeight:800 }}>{stats.net}</span>
                 {totalBonus > 0 && <span style={{ color:'var(--accent)' }}> + 🎁{totalBonus}</span>}
                 {' '}из <span style={{ color:'var(--text)' }}>{available}</span> шт
-                {carryIn > 0 && <span style={{ color:'var(--blue)' }}> (+{carryIn} вчера)</span>}
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontSize:11, color: remaining>0?'var(--accent)':'var(--green)', fontWeight:700 }}>

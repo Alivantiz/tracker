@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { fmtDate, fmtMoney, fmtMonthLabel, calcDayStats, calcGiven, dayRemaining } from '../utils'
+import { fmtDate, fmtMoney, fmtMonthLabel, calcDayStats, dayRemaining } from '../utils'
 
 export default function HistoryView() {
   const [days, setDays]     = useState([])
@@ -42,14 +42,6 @@ export default function HistoryView() {
       </div>
     </div>
   )
-
-  // Перенос остатка: days отсортированы по убыванию даты, поэтому
-  // предыдущий записанный день для days[i] — это days[i+1].
-  const carryByDay = {}
-  for (let i = 0; i < days.length; i++) {
-    const prev = days[i + 1]
-    carryByDay[days[i].id] = prev ? dayRemaining(prev.baked, 0, calcGiven(prev.sales)) : 0
-  }
 
   // Фильтр по диапазону дат
   const filtered = days.filter(d => {
@@ -170,7 +162,7 @@ export default function HistoryView() {
                         <span style={{ color:'var(--muted)', fontSize:11 }}>{isOpen ? '▲' : '▼'}</span>
                       </div>
                     </button>
-                    {isOpen && <DayDetail day={d} shops={shops} stats={s} carryIn={carryByDay[d.id]} />}
+                    {isOpen && <DayDetail day={d} shops={shops} stats={s} />}
                   </div>
                 )
               })}
@@ -182,9 +174,9 @@ export default function HistoryView() {
   )
 }
 
-function DayDetail({ day, shops, stats, carryIn = 0 }) {
+function DayDetail({ day, shops, stats }) {
   const baked = day.baked || 0
-  const remaining = dayRemaining(baked, carryIn, stats.given)
+  const remaining = dayRemaining(baked, stats.given)
   return (
     <div style={{ background:'#13151e', border:'1px solid var(--border)', borderTop:'none', borderRadius:'0 0 10px 10px', padding:'12px 14px' }}>
       <Label>Продажи</Label>
@@ -224,7 +216,7 @@ function DayDetail({ day, shops, stats, carryIn = 0 }) {
       })()}
       {baked > 0 && (
         <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', fontSize:12, color:'var(--muted)' }}>
-          🥖 Испёк {baked}{carryIn > 0 && <span style={{ color:'var(--blue)' }}> +{carryIn} вчера</span>}
+          🥖 Испёк {baked}
           {' · '}📤 Выдано <span style={{ color:'var(--green)' }}>{stats.given}</span>
           {stats.bonus > 0 && <span style={{ color:'var(--accent)' }}> (вкл. 🎁{stats.bonus})</span>}
           {' · '}📦 Остаток <span style={{ color: remaining > 0 ? 'var(--accent)' : 'var(--green)' }}>{remaining}</span> шт

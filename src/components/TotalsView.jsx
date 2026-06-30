@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import { todayStr, fmtMoney, fmtDate, calcDayStats, calcGiven, dayRemaining } from '../utils'
+import { todayStr, fmtMoney, fmtDate, calcDayStats, dayRemaining } from '../utils'
 
 const PAY_ICON   = { 'Наличка':'💵', 'Каспи':'📱', 'Карта':'💳' }
 const PAY_COLOR  = { 'Наличка':'var(--green)', 'Каспи':'var(--blue)', 'Карта':'var(--purple)' }
@@ -22,15 +22,11 @@ export default function TotalsView({ date }) {
       setShops(shopsData || [])
       if (!day) { setData(null); setLoading(false); return }
 
-      const [{ data: sales }, { data: expenses }, { data: prevDays }] = await Promise.all([
+      const [{ data: sales }, { data: expenses }] = await Promise.all([
         supabase.from('sales').select('*').eq('day_id', day.id),
         supabase.from('expenses').select('*').eq('day_id', day.id),
-        supabase.from('days').select('date, baked, sales ( quantity, returns, bonus )')
-          .lt('date', d).order('date', { ascending: false }).limit(1),
       ])
-      const prev = prevDays?.[0]
-      const carryIn = prev ? dayRemaining(prev.baked, 0, calcGiven(prev.sales)) : 0
-      setData({ sales: sales||[], expenses: expenses||[], baked: day.baked || 0, carryIn })
+      setData({ sales: sales||[], expenses: expenses||[], baked: day.baked || 0 })
       setLoading(false)
     }
     load()
@@ -55,9 +51,8 @@ export default function TotalsView({ date }) {
   const activePayments = stats ? Object.entries(stats.byPayment).filter(([, v]) => v !== 0) : []
 
   const baked = data?.baked || 0
-  const carryIn = data?.carryIn || 0
-  const available = baked + carryIn
-  const remaining = stats ? dayRemaining(baked, carryIn, stats.given) : 0
+  const available = baked
+  const remaining = stats ? dayRemaining(baked, stats.given) : 0
 
   return (
     <div className="page fade-in">
@@ -85,12 +80,11 @@ export default function TotalsView({ date }) {
               )}
             </div>
 
-            {/* Лепёшки: испёк / перенос / выдано / остаток */}
+            {/* Лепёшки: испёк / выдано / остаток */}
             {available > 0 && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
                 <Tile label="🥖 Испёк" value={`${baked} шт`} />
-                {carryIn > 0 && <Tile label="⤵ Перенос со вчера" value={`${carryIn} шт`} color="var(--blue)" border="rgba(91,138,245,0.3)" bg="rgba(91,138,245,0.06)" />}
-                <Tile label="📤 Выдано" value={`${stats.given} шт`} color="var(--green)" border="rgba(76,175,125,0.3)" bg="rgba(76,175,125,0.06)" fullWidth={carryIn === 0} />
+                <Tile label="📤 Выдано" value={`${stats.given} шт`} color="var(--green)" border="rgba(76,175,125,0.3)" bg="rgba(76,175,125,0.06)" />
                 <Tile label="📦 Остаток" value={`${remaining} шт`} color={remaining > 0 ? 'var(--accent)' : 'var(--green)'}
                   border={remaining > 0 ? 'rgba(245,166,35,0.3)' : 'rgba(76,175,125,0.3)'} bg={remaining > 0 ? 'rgba(245,166,35,0.06)' : 'rgba(76,175,125,0.06)'} fullWidth />
               </div>

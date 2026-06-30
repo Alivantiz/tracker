@@ -59,17 +59,7 @@ export function calcDayStats(sales, expenses, purchases, salaries) {
   }
 }
 
-// Остаток лепёшек за день = испечено + перенос со вчера − выдано (не меньше 0).
-// Перенос (carryIn) = остаток предыдущего дня (хлеб быстро портится — переносим
-// только с непосредственно предыдущего дня, без цепочки за несколько дней).
-export function dayRemaining(baked, carryIn, given) {
-  return Math.max(0, (Number(baked) || 0) + (Number(carryIn) || 0) - (Number(given) || 0))
-}
-
-// Сколько лепёшек «выдано» (чистые + бонус) по сырым строкам продаж.
-export function calcGiven(sales) {
-  return (sales || []).reduce(
-    (a, s) => a + ((Number(s.quantity) || 0) - (Number(s.returns) || 0)) + (Number(s.bonus) || 0),
-    0
-  )
+// Остаток лепёшек за день = испечено − выдано (не меньше 0).
+export function dayRemaining(baked, given) {
+  return Math.max(0, (Number(baked) || 0) - (Number(given) || 0))
 }
