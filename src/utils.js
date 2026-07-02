@@ -49,8 +49,8 @@ export function calcDayStats(sales, expenses, purchases, salaries) {
   return {
     // штуки
     sold, returns, bonus,
-    net,              // чистые продажи = продано − возврат
-    given: net + bonus, // выдано = чистые + бонус (всё, что ушло из печи)
+    net,              // чистые продажи = продано − возврат (для выручки)
+    given: sold + bonus + returns, // выдано свежих с рук = продано + бонус + возврат (возврат = свежая замена старым; старые списываются)
     revenue,
     byPayment,
     // деньги

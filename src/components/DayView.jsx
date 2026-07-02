@@ -241,8 +241,7 @@ export default function DayView({ onDateChange }) {
           <div style={{ marginBottom:8 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
               <div style={{ fontSize:11, color:'var(--muted)', fontWeight:600 }}>
-                🥖 <span style={{ color:'var(--green)', fontWeight:800 }}>{stats.net}</span>
-                {totalBonus > 0 && <span style={{ color:'var(--accent)' }}> + 🎁{totalBonus}</span>}
+                🥖 выдано <span style={{ color:'var(--green)', fontWeight:800 }}>{stats.given}</span>
                 {' '}из <span style={{ color:'var(--text)' }}>{available}</span> шт
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
