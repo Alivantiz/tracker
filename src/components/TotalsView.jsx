@@ -85,7 +85,7 @@ export default function TotalsView({ date }) {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
                 <Tile label="🥖 Испёк" value={`${baked} шт`} />
                 <Tile label="📤 Выдано" value={`${stats.given} шт`} color="var(--green)" border="rgba(76,175,125,0.3)" bg="rgba(76,175,125,0.06)" />
-                <Tile label="📦 Остаток" value={`${remaining} шт`} color={remaining > 0 ? 'var(--accent)' : 'var(--green)'}
+                <Tile label="🖐 На руках" value={`${remaining} шт`} color={remaining > 0 ? 'var(--accent)' : 'var(--green)'}
                   border={remaining > 0 ? 'rgba(245,166,35,0.3)' : 'rgba(76,175,125,0.3)'} bg={remaining > 0 ? 'rgba(245,166,35,0.06)' : 'rgba(76,175,125,0.06)'} fullWidth />
               </div>
             )}

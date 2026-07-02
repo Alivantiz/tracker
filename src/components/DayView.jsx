@@ -151,7 +151,9 @@ export default function DayView({ onDateChange }) {
     await supabase.from('expenses').delete().eq('id', id)
   }
 
-  const salesArr = shops.map(sh => ({ ...sales[sh.id], shop_id: sh.id }))
+  // Все строки продаж за день (в т.ч. по магазинам, которых уже нет в списке) —
+  // чтобы «на руках» совпадало с Итогами и Историей.
+  const salesArr = Object.values(sales)
   const stats = calcDayStats(salesArr, expenses, [], [])
   const { byPayment } = stats
   const activePayments = Object.entries(byPayment).filter(([, v]) => v !== 0)
@@ -245,7 +247,7 @@ export default function DayView({ onDateChange }) {
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontSize:11, color: remaining>0?'var(--accent)':'var(--green)', fontWeight:700 }}>
-                  {remaining>0 ? `ост: ${remaining} шт` : '✓ всё'}
+                  🖐 на руках: {remaining} шт
                 </span>
                 <button onClick={() => { setBakedInput(String(baked)); setShowBakedModal(true) }}
                   style={{ background:'none', border:'none', color:'var(--muted)', fontSize:13, cursor:'pointer', padding:'0 2px' }}>✏️</button>

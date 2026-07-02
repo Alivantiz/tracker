@@ -219,7 +219,7 @@ function DayDetail({ day, shops, stats }) {
           🥖 Испёк {baked}
           {' · '}📤 Выдано <span style={{ color:'var(--green)' }}>{stats.given}</span>
           {stats.bonus > 0 && <span style={{ color:'var(--accent)' }}> (вкл. 🎁{stats.bonus})</span>}
-          {' · '}📦 Остаток <span style={{ color: remaining > 0 ? 'var(--accent)' : 'var(--green)' }}>{remaining}</span> шт
+          {' · '}🖐 На руках <span style={{ color: remaining > 0 ? 'var(--accent)' : 'var(--green)' }}>{remaining}</span> шт
         </div>
       )}
       <div style={{ display:'flex', justifyContent:'space-between', marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)', fontWeight:700 }}>
